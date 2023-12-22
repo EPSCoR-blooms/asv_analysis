@@ -15,7 +15,6 @@ library(proj4)
 library(rgdal)
 library(rollply)
 library(remotes)
-library(deming)
 library(mcr)
 library(cowplot)
 library(lemon)
@@ -1363,7 +1362,7 @@ chl <- ggplot(data = df, aes(date, chlorophyll_a_RFU)) +
   scale_color_manual(values=c("AUB" = "#FF6DB6", "CHN" = "#B66DFF", "SAB" = "#22CF22", "SUN" = "#006DDB"))+
   scale_x_date(breaks = "1 month", date_labels = "%b")+
   scale_y_continuous(lim = c(0, 3), breaks = seq(0, 3, 0.5))+
-  labs(x = "", y = expression(paste("Chlorophyll ", italic(" a")," (RFU)")))
+  labs(x = "", y = expression(paste("Chl. ", italic(" a")," (RFU)")))
 
 ph <- ggplot(data = df, aes(date, pH)) + 
   theme_classic() +
@@ -1391,7 +1390,7 @@ spc <- ggplot(data = df, aes(date, specificConductance_uscm)) +
   geom_boxplot(aes(color = lake, group = date), width = 8, show.legend = FALSE) +  
   scale_color_manual(values=c("AUB" = "#FF6DB6", "CHN" = "#B66DFF", "SAB" = "#22CF22", "SUN" = "#006DDB"))+
   scale_x_date(breaks = "1 month", date_labels = "%b")+
-  labs(x = "", y = paste0("Specific conductance (", "\u00B5", "S/cm)"))
+  labs(x = "", y = paste0("Sp. C. (", "\u00B5", "S/cm)"))
 
 do <- ggplot(data = df, aes(date, oxygenDissolved_mgl)) + 
   theme_classic() + 
@@ -1405,7 +1404,7 @@ do <- ggplot(data = df, aes(date, oxygenDissolved_mgl)) +
   geom_boxplot(aes(color = lake, group = date), width = 8, show.legend = FALSE) +    
   scale_color_manual(values=c("AUB" = "#FF6DB6", "CHN" = "#B66DFF", "SAB" = "#22CF22", "SUN" = "#006DDB"))+
   scale_x_date(breaks = "1 month", date_labels = "%b")+
-  labs(x = "", y = expression(paste("Dissolved oxygen (mg/L)")))
+  labs(x = "", y = expression(paste("DO (mg/L)")))
 
 temp <- ggplot(data = df, aes(date, temperatureWater_degC, group=date)) + 
   theme_classic() + 
@@ -1419,7 +1418,7 @@ temp <- ggplot(data = df, aes(date, temperatureWater_degC, group=date)) +
   geom_boxplot(aes(color = lake, group = date), width = 8, show.legend = FALSE) + 
   scale_color_manual(values=c("AUB" = "#FF6DB6", "CHN" = "#B66DFF", "SAB" = "#22CF22", "SUN" = "#006DDB"))+
   scale_x_date(breaks = "1 month", date_labels = "%b")+
-  labs(x = "", y = expression(paste("Temperature (ºC)")), color="Lake")
+  labs(x = "", y = expression(paste("Temp. (ºC)")), color="Lake")
 
 turb <- ggplot(data = df, aes(date, turbidity_NTU)) + 
   theme_classic() + 
@@ -1434,10 +1433,11 @@ turb <- ggplot(data = df, aes(date, turbidity_NTU)) +
   scale_color_manual(values=c("AUB" = "#FF6DB6", "CHN" = "#B66DFF", "SAB" = "#22CF22", "SUN" = "#006DDB"))+
   scale_x_date(breaks = "1 month", date_labels = "%b",
                limits = as.Date(c('2021-06-11','2021-10-21')))+
-  labs(x="",y=expression(paste("Turbidity (NTU)")))
+  labs(x="",y=expression(paste("Turb. (NTU)")))
 
-suppfig4 <- ggarrange(chl, ph, spc, do, temp, turb, 
-                                  nrow=3, ncol=2, common.legend = TRUE, legend= "bottom")
+suppfig4 <- ggarrange(temp, do, ph, spc, turb, chl, 
+                                  nrow=3, ncol=2, common.legend = TRUE, legend= "bottom",
+                      labels = c("a", "b", "c", "d", "e", "f"))
 
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig4.png", height = 12, width = 10, suppfig4)
 
@@ -1456,8 +1456,7 @@ a <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="A")
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95))
 
 aa <- ggplot() + 
   geom_point(data = sab20Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -1485,8 +1484,7 @@ b <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="B")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 bb <- ggplot() + 
   geom_point(data = sab20Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -1514,8 +1512,7 @@ c <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="C")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 cc <- ggplot() + 
   geom_point(data = sab20Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_mscm, color = specificConductance_mscm), size = 3)+
@@ -1543,8 +1540,7 @@ d <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="D")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 dd <- ggplot() + 
   geom_point(data = sab20Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_ugl, color = chlorophyll_a_ugl), size = 3)+
@@ -1572,8 +1568,7 @@ e <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="E")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 ee <- ggplot() + 
   geom_point(data = sab20Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
@@ -1601,8 +1596,7 @@ f <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="F")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 ff <- ggplot() + 
   geom_point(data = sab20Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = turbidity_NTU, color = turbidity_NTU), size = 3)+
@@ -1622,7 +1616,8 @@ ff <- ggplot() +
 
 suppfig5 <- ggarrange(aa, bb, cc, dd, ee, ff,
                       a, b, c, d, e, f,
-                      ncol=6, nrow = 2)
+                      ncol=6, nrow = 2,
+                      labels = c("a", "b", "c", "d", "e", "f"))
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig5.png", suppfig5,
        height = 8.5, width = 13)
 
@@ -1638,8 +1633,7 @@ a <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="A")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 aa <- ggplot() + 
   geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -1667,8 +1661,7 @@ b <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="B")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 bb <- ggplot() + 
   geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -1696,8 +1689,7 @@ c <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="C")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 cc <- ggplot() + 
   geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
@@ -1725,8 +1717,7 @@ d <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="D")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 dd <- ggplot() + 
   geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
@@ -1754,8 +1745,7 @@ e <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="E")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 ee <- ggplot() + 
   geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
@@ -1783,8 +1773,7 @@ f <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
         legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
         legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, color = "black"),
         legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text.y = element_text(colour="black"),
-        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.95)) +
-  labs(tag="F")
+        panel.border = element_rect(color = "black", fill = NA, size = 2))
 
 ff <- ggplot() + 
   geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = turbidity_NTU, color = turbidity_NTU), size = 3)+
@@ -1804,7 +1793,8 @@ ff <- ggplot() +
 
 suppfig6 <- ggarrange(aa, bb, cc, dd, ee, ff,
                       a, b, c, d, e, f,
-                      ncol=6, nrow = 2)
+                      ncol=6, nrow = 2,
+                      labels = c("a", "b", "c", "d", "e", "f"))
 
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig6.png", suppfig6,
        height = 8.5, width = 13)
@@ -1827,8 +1817,7 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="A")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   aa <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -1856,8 +1845,7 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="B")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   bb <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -1885,8 +1873,7 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="C")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   cc <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
@@ -1914,8 +1901,7 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="D")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   dd <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
@@ -1943,8 +1929,7 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="E")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ee <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
@@ -1972,8 +1957,7 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="F")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ff <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = turbidity_NTU, color = turbidity_NTU), size = 3)+
@@ -1993,7 +1977,8 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
   
   plot <- ggarrange(aa, bb, cc, dd, ee, ff,
                     a, b, c, d, e, f,
-                    ncol=6, nrow = 2)
+                    ncol=6, nrow = 2,
+                    labels = c("a", "b", "c", "d", "e", "f"))
   
   return(plot)
 }
@@ -2001,7 +1986,7 @@ asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){
 suppfig7 <- asv_plotter_auburn(auburn, aub30Aug21, auburn_all, 16)
 
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig7.png", suppfig7,
-       height = 6, width = 13)
+       height = 7, width = 13)
 
 # Supp Figs 8-12 (CHINA)
 
@@ -2021,8 +2006,7 @@ asv_plotter_china_allParam <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="A")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   aa <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -2050,8 +2034,7 @@ asv_plotter_china_allParam <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="B")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   bb <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -2079,8 +2062,7 @@ asv_plotter_china_allParam <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="C")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   cc <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
@@ -2108,8 +2090,7 @@ asv_plotter_china_allParam <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="D")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   dd <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
@@ -2137,8 +2118,7 @@ asv_plotter_china_allParam <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="E")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ee <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
@@ -2166,8 +2146,7 @@ asv_plotter_china_allParam <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="F")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ff <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = turbidity_NTU, color = turbidity_NTU), size = 3)+
@@ -2187,22 +2166,15 @@ asv_plotter_china_allParam <- function(map_bounds, deployment, lake_all, zoom){
   
   plot <- ggarrange(aa, bb, cc, dd, ee, ff,
                     a, b, c, d, e, f,
-                    ncol=6, nrow = 2)
+                    ncol=6, nrow = 2,
+                    labels = c("a", "b", "c", "d", "e", "f"))
   
   return(plot)
 }
 
 suppfig8 <- asv_plotter_china_allParam(china, chn06Aug21, china_all, 16)
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig8.png", suppfig8,
-       height = 6, width = 14)
-
-suppfig11 <- asv_plotter_china_allParam(china, chn12Oct21, china_all, 16)
-ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig11.png", suppfig11,
-       height = 6, width = 14)
-
-suppfig12 <- asv_plotter_china_allParam(china, chn21Oct21, china_all, 16)
-ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig12.png", suppfig12,
-       height = 6, width = 14)
+       height = 7, width = 14)
 
 asv_plotter_china_noSpC <- function(map_bounds, deployment, lake_all, zoom){ 
   #where "deployment" is the dataframe of that particular deployment date
@@ -2220,8 +2192,7 @@ asv_plotter_china_noSpC <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="A")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   aa <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -2249,8 +2220,7 @@ asv_plotter_china_noSpC <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="B")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   bb <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -2278,8 +2248,7 @@ asv_plotter_china_noSpC <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="C")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   dd <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
@@ -2307,8 +2276,7 @@ asv_plotter_china_noSpC <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="D")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ee <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
@@ -2336,8 +2304,7 @@ asv_plotter_china_noSpC <- function(map_bounds, deployment, lake_all, zoom){
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6),
           axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y.left = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="E")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ff <- ggplot() + 
     geom_point(data = deployment, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = turbidity_NTU, color = turbidity_NTU), size = 3)+
@@ -2357,18 +2324,27 @@ asv_plotter_china_noSpC <- function(map_bounds, deployment, lake_all, zoom){
   
   plot <- ggarrange(aa, bb, dd, ee, ff,
                     a, b, d, e, f,
-                    ncol=5, nrow = 2)
+                    ncol=5, nrow = 2,
+                    labels = c("a", "b", "c", "d", "e"))
   
   return(plot)
 }
 
 suppfig9 <- asv_plotter_china_noSpC(china, chn28Sep21, china_all, 16)
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig9.png", suppfig9,
-       height = 8, width = 19)
+       height = 7, width = 14)
 
 suppfig10 <- asv_plotter_china_noSpC(china, chn05Oct21, china_all, 16)
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig10.png", suppfig10,
-       height = 6, width = 14)
+       height = 7, width = 14)
+
+suppfig11 <- asv_plotter_china_allParam(china, chn12Oct21, china_all, 16)
+ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig11.png", suppfig11,
+       height = 7, width = 14)
+
+suppfig12 <- asv_plotter_china_allParam(china, chn21Oct21, china_all, 16)
+ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig12.png", suppfig12,
+       height = 7, width = 14)
 
 # Supp Figs 13-21 (SUNAPEE)
 
@@ -2389,8 +2365,7 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), axis.text.y = element_text(color = "black"),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9),) +
-    labs(tag="A")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   aa <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -2431,11 +2406,10 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
                           midpoint = ((max(lake_all$temperatureWater_degC, na.rm = T)-min(lake_all$temperatureWater_degC, na.rm = T))/2)+min(lake_all$temperatureWater_degC, na.rm = T),
                           name="Temperature (ºC)") +
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
-          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.9, 0.9),
+          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"),  axis.ticks = element_blank(),
           legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6), axis.text.y = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="B")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   bb <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -2478,15 +2452,14 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), axis.text.y = element_text(color = "black"),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.ticks = element_blank(),
-          legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6), plot.tag.position = c(0.9, 0.9),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="C")
+          legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6),
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   cc <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
-                          name=paste0("Specific conductance (", "\u00B5", "S/cm)")) +
+                          name=paste0("Sp. C. (", "\u00B5", "S/cm)")) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, specificConductance_uscm, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2496,13 +2469,13 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(paste0("Specific conductance (", "\u00B5", "S/cm)"))
+    ylab(paste0("Sp. C. (", "\u00B5", "S/cm)"))
   
   ccc <- ggplot() + 
     geom_point(data = path2, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
-                          name=paste0("Specific conductance (", "\u00B5", "S/cm)")) +
+                          name=paste0("Sp. conductance (", "\u00B5", "S/cm)")) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path2, specificConductance_uscm, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2512,7 +2485,7 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(paste0("Specific conductance (", "\u00B5", "S/cm)"))
+    ylab(paste0("Sp. C. (", "\u00B5", "S/cm)"))
   
   d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
@@ -2521,17 +2494,16 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
                           midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
                           name=expression(paste("Chlorophyll ", italic("a"), " (RFU)"))) +
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
-          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.9, 0.9),
+          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.ticks = element_blank(),
           legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6), axis.text.y = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="D")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   dd <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
-                          name=expression(paste("Chlorophyll ", italic("a"), " (RFU)"))) +
+                          name=expression(paste("Chl. ", italic("a"), " (RFU)"))) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, chlorophyll_a_RFU, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2541,7 +2513,7 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(expression(paste("Chlorophyll ", italic("a"), " (RFU)")))
+    ylab(expression(paste("Chl. ", italic("a"), " (RFU)")))
   
   ddd <- ggplot() + 
     geom_point(data = path2, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
@@ -2557,7 +2529,7 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(expression(paste("Chlorophyll ", italic("a"), " (RFU)")))
+    ylab(expression(paste("Chl. ", italic("a"), " (RFU)")))
   
   e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
@@ -2566,17 +2538,16 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
                           name="DO (mg/L)") +
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
-          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.9, 0.9),
+          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y = element_text(color = "black"), axis.ticks = element_blank(),
           legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="E")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ee <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
-                          name="Dissolved oxygen (mg/L)") +
+                          name="DO (mg/L)") +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2586,13 +2557,13 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab("Dissolved oxygen (mg/L)")
+    ylab("DO (mg/L)")
   
   eee <- ggplot() + 
     geom_point(data = path2, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
-                          name="Dissolved oxygen (mg/L)") +
+                          name="DO (mg/L)") +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path2, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2602,27 +2573,28 @@ asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, la
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab("Dissolved oxygen (mg/L)")
+    ylab("DO (mg/L)")
   
   plot <- ggarrange(aa, bb, cc, dd, ee,
                     aaa, bbb, ccc, ddd, eee,
                     a, b, c, d, e,
-                    ncol=5, nrow = 3)
+                    ncol=5, nrow = 3,
+                    labels = c("a", "b", "c", "d", "e"))
   
   return(plot)
 }
 
 suppfig13 <- asv_plotter_sunapee_preTurb(sunapee, sun11Jun21, sun11Jun21.HC, sun11Jun21.NW, sunapee_all, 16)
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig13.png", suppfig13,
-       height = 8, width = 14)
+       height = 7, width = 12)
 
 suppfig14 <- asv_plotter_sunapee_preTurb(sunapee, sun15Jun21, sun15Jun21.HC, sun15Jun21.NW, sunapee_all, 16)
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig14.png", suppfig14,
-       height = 8, width = 14)
+       height = 7, width = 12)
 
 suppfig15 <- asv_plotter_sunapee_preTurb(sunapee, sun21Jun21, sun21Jun21.HC, sun21Jun21.NW, sunapee_all, 16)
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig15.png", suppfig15,
-       height = 8, width = 14)
+       height = 7, width = 12)
 
 asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, lake_all, zoom){ 
   #dates when deployments only happened at one of the two Sunapee sites, preTurb
@@ -2641,8 +2613,7 @@ asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, l
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), axis.text.y = element_text(color = "black"),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9),) +
-    labs(tag="A")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   aa <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -2667,11 +2638,10 @@ asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, l
                           midpoint = ((max(lake_all$temperatureWater_degC, na.rm = T)-min(lake_all$temperatureWater_degC, na.rm = T))/2)+min(lake_all$temperatureWater_degC, na.rm = T),
                           name="Temperature (ºC)") +
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
-          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.9, 0.9),
+          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"),  axis.ticks = element_blank(),
           legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6), axis.text.y = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="B")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   bb <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -2698,15 +2668,14 @@ asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, l
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), axis.text.y = element_text(color = "black"),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.ticks = element_blank(),
-          legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6), plot.tag.position = c(0.9, 0.9),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="C")
+          legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6),
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   cc <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
-                          name=paste0("Specific conductance (", "\u00B5", "S/cm)")) +
+                          name=paste0("Sp. C. (", "\u00B5", "S/cm)")) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, specificConductance_uscm, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2716,7 +2685,7 @@ asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(paste0("Specific conductance (", "\u00B5", "S/cm)"))
+    ylab(paste0("Sp. C. (", "\u00B5", "S/cm)"))
   
   d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
@@ -2725,11 +2694,10 @@ asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, l
                           midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
                           name=expression(paste("Chlorophyll ", italic("a"), " (RFU)"))) +
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
-          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.9, 0.9),
+          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.ticks = element_blank(),
           legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6), axis.text.y = element_text(color = "black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="D")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   dd <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
@@ -2754,17 +2722,16 @@ asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, l
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
                           name="DO (mg/L)") +
     theme(legend.position = "none", axis.title=element_blank(), text = element_text(size=12, color = "black"),
-          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.9, 0.9),
+          legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12, color = "black"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, colour = "black"), axis.text.y = element_text(color = "black"), axis.ticks = element_blank(),
           legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 6),
-          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
-    labs(tag="E")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ee <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
-                          name="Dissolved oxygen (mg/L)") +
+                          name="DO (mg/L)") +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2774,18 +2741,19 @@ asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab("Dissolved oxygen (mg/L)")
+    ylab("DO (mg/L)")
   
   plot <- ggarrange(aa, bb, cc, dd, ee,
                     a, b, c, d, e,
-                    ncol=5, nrow = 2)
+                    ncol=5, nrow = 2,
+                    labels = c("a", "b", "c", "d", "e"))
   
   return(plot)
 }
 
 suppfig16 <- asv_plotter_sunapee_preTurb_oneSite(sunapee, sun01Jul21.HC, sun01Jul21.HC, sunapee_all, 16)
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig16.png", suppfig16,
-       height = 6, width = 14)
+       height = 5, width = 12)
 
 asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, lake_all, zoom){ #where deployment is the dataframe of that particular deployment date
   #and lake_all is a combined dataframe that contains all deployments for a single lake
@@ -2802,8 +2770,7 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="A")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   aa <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -2831,8 +2798,7 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="B")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   bb <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -2860,14 +2826,13 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="C")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   cc <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
-                          name=paste0("Specific conductance (", "\u00B5", "S/cm)")) +
+                          name=paste0("Sp. C. (", "\u00B5", "S/cm)")) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, specificConductance_uscm, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2877,7 +2842,7 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(paste0("Specific conductance (", "\u00B5", "S/cm)"))
+    ylab(paste0("Sp. C. (", "\u00B5", "S/cm)"))
   
   d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
@@ -2889,14 +2854,13 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="D")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   dd <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
-                          name=expression(paste("Chlorophyll ", italic("a"), " (RFU)"))) +
+                          name=expression(paste("Chl. ", italic("a"), " (RFU)"))) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, chlorophyll_a_RFU, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2906,7 +2870,7 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(expression(paste("Chlorophyll ", italic("a"), " (RFU)")))
+    ylab(expression(paste("Chl. ", italic("a"), " (RFU)")))
   
   e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
@@ -2918,14 +2882,13 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="E")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ee <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
-                          name="Dissolved oxygen (mg/L)") +
+                          name="DO (mg/L)") +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -2935,7 +2898,7 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab("Dissolved oxygen (mg/L)")
+    ylab("DO (mg/L)")
   
   f <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = turbidity_NTU), size=1, shape = 10,
@@ -2947,8 +2910,7 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="F")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ff <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = turbidity_NTU, color = turbidity_NTU), size = 3)+
@@ -2968,7 +2930,8 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
   
   plot <- ggarrange(aa, bb, cc, dd, ee, ff,
                     a, b, c, d, e, f,
-                    ncol=6, nrow = 2)
+                    ncol=6, nrow = 2,
+                    labels = c("a", "b", "c", "d", "e", "f"))
   
   return(plot)
 }
@@ -2976,7 +2939,7 @@ asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, 
 suppfig17 <- asv_plotter_sunapee_postTurb_oneSite(sunapee, sun22Jul21.HC, sun22Jul21.HC, sunapee_all, 16)
 
 ggsave(filename = "~/Dropbox/Bates/Manuscripts/ASVLimno_MS/documents/SuppFig17.png", suppfig17,
-       height = 6, width = 14)
+       height = 5, width = 12)
 
 asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, lake_all, zoom){ #where deployment is the dataframe of that particular deployment date
   #and lake_all is a combined dataframe that contains all deployments for a single lake
@@ -2993,8 +2956,7 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="A")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   aa <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = pH, color = pH), size = 3)+
@@ -3038,8 +3000,7 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="B")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   bb <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = temperatureWater_degC, color = temperatureWater_degC), size = 3)+
@@ -3083,8 +3044,7 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="C")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   cc <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
@@ -3100,13 +3060,13 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(paste0("Specific conductance (", "\u00B5", "S/cm)"))
+    ylab(paste0("Sp. C. (", "\u00B5", "S/cm)"))
   
   ccc <- ggplot() + 
     geom_point(data = path2, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = specificConductance_uscm, color = specificConductance_uscm), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
-                          name=paste0("Specific conductance (", "\u00B5", "S/cm)")) +
+                          name=paste0("Sp. C. (", "\u00B5", "S/cm)")) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path2, specificConductance_uscm, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -3116,7 +3076,7 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(paste0("Specific conductance (", "\u00B5", "S/cm)"))
+    ylab(paste0("Sp. C. (", "\u00B5", "S/cm)"))
   
   d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
@@ -3128,14 +3088,13 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="D")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   dd <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
-                          name=expression(paste("Chlorophyll ", italic("a"), " (RFU)"))) +
+                          name=expression(paste("Chl. ", italic("a"), " (RFU)"))) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, chlorophyll_a_RFU, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -3145,13 +3104,13 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(expression(paste("Chlorophyll ", italic("a"), " (RFU)")))
+    ylab(expression(paste("Chl. ", italic("a"), " (RFU)")))
   
   ddd <- ggplot() + 
     geom_point(data = path2, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = chlorophyll_a_RFU, color = chlorophyll_a_RFU), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
-                          name=expression(paste("Chlorophyll ", italic("a"), " (RFU)"))) +
+                          name=expression(paste("Chl. ", italic("a"), " (RFU)"))) +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path2, chlorophyll_a_RFU, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -3161,7 +3120,7 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab(expression(paste("Chlorophyll ", italic("a"), " (RFU)")))
+    ylab(expression(paste("Chl. ", italic("a"), " (RFU)")))
   
   e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
@@ -3173,14 +3132,13 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="E")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ee <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
-                          name="Dissolved oxygen (mg/L)") +
+                          name="DO (mg/L)") +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path1, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -3190,13 +3148,13 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab("Dissolved oxygen (mg/L)")
+    ylab("DO (mg/L)")
   
   eee <- ggplot() + 
     geom_point(data = path2, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = oxygenDissolved_mgl, color = oxygenDissolved_mgl), size = 3)+
     scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
                           midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
-                          name="Dissolved oxygen (mg/L)") +
+                          name="DO (mg/L)") +
     theme_bw()+
     xlab("Timestamp") + 
     geom_line(data = asv_window(path2, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="EST"), y = mean), color = 'black', size=1)+
@@ -3206,7 +3164,7 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           panel.border = element_rect(color = "black", fill = NA, size = 2))+
     scale_x_datetime(breaks = scales::date_breaks("40 mins"), date_labels = "%H:%M")+
     xlab("Time (EDT)")+
-    ylab("Dissolved oxygen (mg/L)")
+    ylab("DO (mg/L)")
   
   f <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
     geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = turbidity_NTU), size=1, shape = 10,
@@ -3218,8 +3176,7 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
           legend.key.width = unit(3, "mm"), plot.margin = margin(1, 1, 1, 1),
           legend.title = element_text(size=12), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.text = element_text(angle = 45, hjust = 0, vjust = 0, size = 6), axis.text=element_text(colour="black"),
-          panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.9, 0.9)) +
-    labs(tag="F")
+          panel.border = element_rect(color = "black", fill = NA, size = 2))
   
   ff <- ggplot() + 
     geom_point(data = path1, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "EST"), y = turbidity_NTU, color = turbidity_NTU), size = 3)+
@@ -3256,7 +3213,8 @@ asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, l
   plot <- ggarrange(aa, bb, cc, dd, ee, ff,
                     aaa, bbb, ccc, ddd, eee, fff,
                     a, b, c, d, e, f,
-                    ncol=6, nrow = 3)
+                    ncol=6, nrow = 3,
+                    labels = c("a", "b", "c", "d", "e", "f"))
   
   return(plot)
 }
