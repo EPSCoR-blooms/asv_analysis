@@ -1,0 +1,2674 @@
+###############################################################################################
+# ASV SPATIOTEMPORAL HETEROGENEITY -- MAIN TEXT
+# Script written by Arsenault, Steele, Shingai, Cottingham et al. 2025
+# Produces data analyses and figures for manuscript (main text)
+# Relies on:
+  #Robotics data files on EDI (https://doi.org/10.6073/pasta/e9b06691846d778e37f87b95ae87a07f)
+###############################################################################################
+
+# Load libraries
+
+packages <- c("tidyverse", "timetk", "lubridate", "zoo", "proj4", "rgdal", "rollply", "remotes",
+              "mcr", "lemon", "gridExtra", "ggpubr", "ggmap", "forcats", "readr", "RColorBrewer",
+              "ggnewscale", "Hmisc", "PerformanceAnalytics", "scales", "ggsn", "sf", "colorspace", "ggspatial")
+
+lapply(packages, require, character.only = TRUE)
+
+# Load data files
+
+aub30Aug21 <- read.csv(file = "AUB/AUB_2021-08-30_a_asv_processed_v2022-03-23.csv", header=T)
+
+chn06Aug21 <- read.csv(file = "CHN/CHN_2021-08-06_a_asv_processed_v2022-03-23.csv", header = T)[1:4005,] #modified to cut off after last loiter
+
+chn28Sep21 <- read.csv(file = "CHN/CHN_2021-09-28_a_asv_processed_v2022-03-23.csv", header = T) %>% 
+  select(-specificConductance_uscm) %>% #exclude SpC data due to unsuccessful calibration
+  mutate(specificConductance_uscm = NA)
+
+chn05Oct21 <- read.csv(file = "CHN/CHN_2021-10-05_a_asv_processed_v2022-03-23.csv", header = T)[1:2128,] %>% #trim after last programmed waypoint
+  select(-specificConductance_uscm) %>% #exclude SpC data due to unsuccessful calibration
+  mutate(specificConductance_uscm = NA)
+
+chn12Oct21 <- read.csv(file = "CHN/CHN_2021-10-12_a_asv_processed_v2022-03-23.csv", header = T)
+
+chn21Oct21 <- read.csv(file = "CHN/CHN_2021-10-21_a_asv_processed_v2022-03-23.csv", header = T)
+
+sab20Aug21 <- read.csv(file = "SAB/SAB_2021-08-20_a_asv_processed_v2022-03-23.csv", header = T)
+
+sab26Aug21 <- read.csv(file = "SAB/SAB_2021-08-26_a_asv_processed_v2022-03-23.csv", header = T)[697:15177,] #modified to trim out test path at beginning
+
+sun11Jun21.HC <- read.csv(file = "SUN/SUN_2021-06-11_HC_asv_processed_v2022-03-23.csv", header = T)
+
+sun11Jun21.NW <- read.csv(file = "SUN/SUN_2021-06-11_NW_asv_processed_v2022-03-23.csv", header = T)
+
+sun15Jun21.HC <- read.csv(file = "SUN/SUN_2021-06-15_HC_asv_processed_v2022-03-23.csv", header = T)
+
+sun15Jun21.NW <- read.csv(file = "SUN/SUN_2021-06-15_NW_asv_processed_v2022-03-23.csv", header = T)
+
+sun21Jun21.HC <- read.csv(file = "SUN/SUN_2021-06-21_HC_asv_processed_v2022-03-23.csv", header = T)
+
+sun21Jun21.NW <- read.csv(file = "SUN/SUN_2021-06-21_NW_asv_processed_v2022-03-23.csv", header = T)
+
+sun01Jul21.HC <- read.csv(file = "SUN/SUN_2021-07-01_HC_asv_processed_v2022-03-23.csv", header = T)
+
+sun22Jul21.HC <- read.csv(file = "SUN/SUN_2021-07-22_asv_processed_v2022-03-23.csv", header = T)[1:3222,] #trimmed to include planned path only
+
+sun22Jul21.NW <- read.csv(file = "SUN/SUN_2021-07-22_asv_processed_v2022-03-23.csv", header = T)[3223:10040,] #trimmed to include planned path only
+
+sun05Aug21.HC <- read.csv(file = "SUN/SUN_2021-08-05_HC_asv_processed_v2022-03-23.csv", header = T) 
+
+sun05Aug21.NW <- read.csv(file = "SUN/SUN_2021-08-05_NW_asv_processed_v2022-03-23.csv", header = T)
+
+sun10Aug21.HC <- read.csv(file = "SUN/SUN_2021-08-10_HC_asv_processed_v2022-03-23.csv", header = T)
+
+sun10Aug21.NW <- read.csv(file = "SUN/SUN_2021-08-10_NW_asv_processed_v2022-03-23.csv", header = T)
+
+sun27Aug21.HC <- read.csv(file = "SUN/SUN_2021-08-27_HC_asv_processed_v2022-03-23.csv", header = T)
+
+sun27Aug21.NW <- read.csv(file = "SUN/SUN_2021-08-27_NW_asv_processed_v2022-03-23.csv", header = T) 
+
+sun16Sep21.HC <- read.csv(file = "SUN/SUN_2021-09-16_HC_asv_processed_v2022-03-23.csv", header = T)
+
+sun16Sep21.NW <- read.csv(file = "SUN/SUN_2021-09-16_NW_asv_processed_v2022-03-23.csv", header = T)
+
+# Label data for analysis
+
+travel_effects <- function(df, n_sec){ # requires a dataframe (df) and number of seconds to designate for movement, pre- and post-loiter
+  
+  # get a list of the loiter waypoints (wp) by HEADER SEQUENCE, waypoint_seq repeats sometimes, and we want each of these to be unique
+  wp_loiter <- unique(df$header_seq[df$wp_command == 19 & !is.na(df$wp_command)])   
+  
+  # loop over way points
+  # here 'i' is an iteration along 1 to the length of the value 'wp_loiter'; i therefore refers to the position 1:n of the list 'wp_loiter'
+  for (i in 1:length(wp_loiter)){  
+    
+    # grab the time stamp for the loiter end using the wp_loiter list
+    # here, wp_loiter[i] is grabbing the i'th position in the wp_loiter list.
+    loiter_end <- df$timestamp_gps_sec[which(df$header_seq == wp_loiter[i])]   
+    
+    # calculate loiter start from the wp param (seconds of loiter) associated with the loiter
+    loiter_start <- loiter_end - df$wp_param1[which(df$header_seq == wp_loiter[i])]
+    
+    # determine the start and end of the pre and post loiter periods 
+    # uses the number of seconds away from the start or end of the loiter controlled by the user as sent into this function
+    preloit_start <- loiter_start - n_sec
+    postloit_end <- loiter_end + n_sec
+    
+    # make a data frame that only includes the info we're interested in for this waypoint
+    df_test <- df %>% 
+      # keep only those timestamps from the preloiter start through the post loiter end
+      filter(timestamp_gps_sec >= preloit_start & timestamp_gps_sec < postloit_end)
+    
+    # calculate and label pre/post/during loiters
+    df_test <- df_test %>% 
+      mutate(loiter_tag = case_when(timestamp_gps_sec < loiter_start ~ 'pre-loiter',
+                                    timestamp_gps_sec >= loiter_start & timestamp_gps_sec <= loiter_end ~ 'loiter',
+                                    timestamp_gps_sec > loiter_end ~ 'post-loiter',
+                                    TRUE ~ NA_character_))
+    
+    df_test$loiter_num = i
+    df_test$loiterID = paste(df_test$loiter_tag, df_test$loiter_num, sep = '_')
+    
+    # if the first time through iteration, save test as df; otherwise append!
+    if (i == 1) {
+      loiter_df = df_test
+    } else {
+      loiter_df = full_join(loiter_df, df_test)
+    }
+  }
+  return(loiter_df)
+}
+
+preset_loiter_time <- 60 # time in seconds pre- and post- loiter = travel time to compare to loiter time
+
+# Run travel_effects function for China Lake - 5 deployments
+
+chn06Aug21_labeled <- travel_effects(chn06Aug21, preset_loiter_time) %>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+chn28Sep21_labeled <- travel_effects(chn28Sep21, preset_loiter_time) %>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+chn05Oct21_labeled <- travel_effects(chn05Oct21, preset_loiter_time) %>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+chn12Oct21_labeled <- travel_effects(chn12Oct21, preset_loiter_time) %>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+chn21Oct21_labeled <- travel_effects(chn21Oct21, preset_loiter_time) %>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+
+# Run travel_effects function for Sabattus Pond - 2 deployments
+
+sab20Aug21_labeled <- travel_effects(sab20Aug21, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sab26Aug21_labeled <- travel_effects(sab26Aug21, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+
+# Run travel_effects function for Auburn - 1 deployment
+
+aub30Aug21_labeled <- travel_effects(aub30Aug21, preset_loiter_time) %>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+
+# Run travel_effects function for Sunapee - 9 deployments
+
+sun11Jun21.HC_labeled <- travel_effects(sun11Jun21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun11Jun21.NW_labeled <- travel_effects(sun11Jun21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun15Jun21.HC_labeled <- travel_effects(sun15Jun21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun15Jun21.NW_labeled <- travel_effects(sun15Jun21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun21Jun21.HC_labeled <- travel_effects(sun21Jun21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun21Jun21.NW_labeled <- travel_effects(sun21Jun21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun01Jul21.HC_labeled <- travel_effects(sun01Jul21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU") #only herrick cove
+sun22Jul21.HC_labeled <- travel_effects(sun22Jul21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun22Jul21.NW_labeled <- travel_effects(sun22Jul21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun05Aug21.HC_labeled <- travel_effects(sun05Aug21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun05Aug21.NW_labeled <- travel_effects(sun05Aug21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun10Aug21.HC_labeled <- travel_effects(sun10Aug21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun10Aug21.NW_labeled <- travel_effects(sun10Aug21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun27Aug21.HC_labeled <- travel_effects(sun27Aug21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun27Aug21.NW_labeled <- travel_effects(sun27Aug21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun16Sep21.HC_labeled <- travel_effects(sun16Sep21.HC, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun16Sep21.NW_labeled <- travel_effects(sun16Sep21.NW, preset_loiter_time)%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+
+# Avoid repeating site IDs (Sunapee data only) due to having two separate datasets (HC and NW) for each deployment date
+
+sun11Jun21.HC_labeled <- rename(sun11Jun21.HC_labeled, loiternumb_old = loiter_num)
+sun15Jun21.HC_labeled <- rename(sun15Jun21.HC_labeled, loiternumb_old = loiter_num)
+sun21Jun21.HC_labeled <- rename(sun21Jun21.HC_labeled, loiternumb_old = loiter_num)
+sun22Jul21.HC_labeled <- rename(sun22Jul21.HC_labeled, loiternumb_old = loiter_num)
+sun05Aug21.HC_labeled <- rename(sun05Aug21.HC_labeled, loiternumb_old = loiter_num)
+sun10Aug21.HC_labeled <- rename(sun10Aug21.HC_labeled, loiternumb_old = loiter_num)
+sun27Aug21.HC_labeled <- rename(sun27Aug21.HC_labeled, loiternumb_old = loiter_num)
+sun16Sep21.HC_labeled <- rename(sun16Sep21.HC_labeled, loiternumb_old = loiter_num)
+
+# Replace loiter numbers 1,2 with 4,5 in the HC dataframes
+
+sun11Jun21.HC_labeled_renamed <- mutate(sun11Jun21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun15Jun21.HC_labeled_renamed <- mutate(sun15Jun21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun21Jun21.HC_labeled_renamed <- mutate(sun21Jun21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun22Jul21.HC_labeled_renamed <- mutate(sun22Jul21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun05Aug21.HC_labeled_renamed <- mutate(sun05Aug21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun10Aug21.HC_labeled_renamed <- mutate(sun10Aug21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun27Aug21.HC_labeled_renamed <- mutate(sun27Aug21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+sun16Sep21.HC_labeled_renamed <- mutate(sun16Sep21.HC_labeled, loiter_num = ifelse(loiternumb_old == 1, 4, 5))%>% select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+
+# Combine columns from data frames to run analysis by parameter instead of by lake (combine all lakes)
+
+df <- rbind(chn06Aug21_labeled, chn28Sep21_labeled, chn05Oct21_labeled, chn12Oct21_labeled, chn21Oct21_labeled, 
+            sab20Aug21_labeled, sab26Aug21_labeled, aub30Aug21_labeled, 
+            sun11Jun21.HC_labeled_renamed, sun11Jun21.NW_labeled, sun15Jun21.HC_labeled_renamed, sun15Jun21.NW_labeled, 
+            sun21Jun21.HC_labeled_renamed, sun21Jun21.NW_labeled, sun01Jul21.HC_labeled, sun22Jul21.HC_labeled_renamed, sun22Jul21.NW_labeled,
+            sun05Aug21.HC_labeled_renamed, sun05Aug21.NW_labeled, sun10Aug21.HC_labeled_renamed, sun10Aug21.NW_labeled, 
+            sun27Aug21.HC_labeled_renamed, sun27Aug21.NW_labeled, sun16Sep21.HC_labeled_renamed, sun16Sep21.NW_labeled)
+
+# Define "source" as a factor date
+
+df$source <- as.factor(df$date)
+
+# Filter the data to ask questions about differences between traveling and loitering
+
+during_loiter_speed_threshold <- 0.5 # how fast the robot can be going in a loiter period
+during_mvmt_speed_threshold <- 0.9 # how slow the robot can be going in a movement period
+
+df_trim <- df %>%
+  # keep only those rows rows which are during a movement period but gps speed is greater than the threshold
+  # OR are during a loiter period & gps speed is below the too fast threshold
+  filter(((loiter_tag=="pre-loiter" | loiter_tag=="post-loiter") & velocity_gps_mps > during_mvmt_speed_threshold) |
+           (loiter_tag=="loiter" & velocity_gps_mps < during_mvmt_speed_threshold)) 
+
+# Grouping pre/post to be just movement by site ID
+df1 <-  df_trim %>%
+  mutate(movement=case_when(str_detect(loiterID,"pre-loiter|post-loiter")~paste0("movement_",loiter_num),
+                            TRUE~ paste0("loiter_",loiter_num)))
+
+# Pull out the site id as a separate column in a "data frame to functions"
+df_to_fxns <- df1 %>% separate(movement,c("type","siteid"),"_") %>% mutate(siteid=parse_number(siteid)) 
+
+# Make sure everything is there (all lakes, all sites) - this creates a new column that ultimately won't be used for anything else other than to check
+df_to_fxns$lake_site_date <- paste(df_to_fxns$lake, df_to_fxns$siteid, df_to_fxns$date)
+df_to_fxns$lake_date <- paste(df_to_fxns$lake, df_to_fxns$date)
+
+unique(df_to_fxns$lake_date)
+unique(df_to_fxns$lake_site_date)
+
+# Prepare maps for plotting next set of figures
+
+register_stadiamaps("824098f1-8592-4542-bbe1-273a75bd7de3") #API key
+
+# Set boundaries for all upcoming maps
+
+sunapee <- c(left = -72.0562, bottom = 43.4073, right = -72.0300, top = 43.4200)
+sunapee_large <- c(left = -72.077, bottom = 43.40, right = -72.025, top = 43.4335)
+
+auburn <- c(left = -70.2504, bottom = 44.1450, right = -70.233, top = 44.1600)
+auburn_fig2 <- c(left = -70.250, bottom = 44.1450, right = -70.230, top = 44.1600)
+
+china <- c(left = -69.6071, bottom = 44.4425, right = -69.6000, top = 44.4470)
+
+sabattus <- c(left = -70.1180, bottom = 44.1156, right = -70.0780, top = 44.1760)
+sabattus_large <- c(left = -70.1300, bottom = 44.1156, right = -70.0700, top = 44.1760)
+sabattus_fig2 <- c(left = -70.1400, bottom = 44.1156, right = -70.0600, top = 44.1760)
+
+# Figure 2 - site maps
+
+#format Sunapee deployment for plotting (choose one deployment lat/longs to represent usual path)
+sun16Sep21 <- rbind(sun16Sep21.HC, sun16Sep21.NW) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+# Figure 2a: Lake Sunapee
+
+fig2aSun <- get_stadiamap(sunapee_large, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), color = "black", size=1, shape = 10,
+             data = sun16Sep21) +
+  geom_point(aes(x = -72.03080, y = 43.40967), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -72.03080, y = 43.40967, colour = "white", size = 4, label = "T", fontface = "bold") + # Herrick Cove South
+  geom_point(aes(x = -72.03589, y = 43.41281), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -72.03589, y = 43.41281, colour = "white", size = 4, label = "T", fontface = "bold") + # Herrick Cove North
+  geom_point(aes(x = -72.066, y = 43.430), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -72.066, y = 43.430, colour = "white", size = 4, label = "T", fontface = "bold") + # Herrick Cove South
+  geom_point(aes(x = -72.069, y = 43.431), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -72.069, y = 43.431, colour = "white", size = 4, label = "T", fontface = "bold") + # Herrick Cove North
+  theme(text = element_text(size=14, color = "black"), plot.margin = margin(1, 1, 1, 1),
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90, hjust = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.1, 0.9)) +
+  scale_x_continuous(breaks = seq(-72.07, -72.03, by=0.02), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.43, by = 0.01), expand=expansion(0,0)) +
+  ylab("Latitude") +
+  xlab("") +
+  ggsn::scalebar(x.min = -72.074, x.max = -72.04,
+                 y.min = 43.403, y.max = 43.405, 
+                 dist = 500, model = 'WGS84',
+                 transform = T, dist_unit = "m", box.fill = c("black", "white"), st.color = "black",
+                 location = "bottomleft", height = 0.4, st.size = 4, st.dist = 0.5)
+
+# Figure 2b: Lake Auburn
+
+fig2bAub <- get_stadiamap(auburn_fig2, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), color = "black", size=1, shape = 10,
+             data = aub30Aug21) +
+  geom_point(aes(x = -70.24266, y = 44.15925), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -70.24266, y = 44.15925, colour = "white", size = 4, label = "T", fontface = "bold") + # Townsend Brook
+  geom_point(aes(-70.23528, y = 44.15647), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", -70.23528, y = 44.15647, colour = "white", size = 4, label = "T", fontface = "bold") + # First Brook
+  geom_point(aes(x = -70.243661, y = 44.158278), pch = 21, size = 10, color = "black", fill = "red") +
+  annotate("text", x = -70.243661, y = 44.158278, colour = "black", size = 4, label = "B", fontface = "bold") + # Site 5 Buoy
+  geom_point(aes(x = -70.24085, y = 44.15262), pch = 21, size = 10, color = "black", fill = "white") +
+  annotate("text", x = -70.24085, y = 44.15262, colour = "black", size = 4, label = "I", fontface = "bold") + # Island
+  theme(text = element_text(size=14, color = "black"), plot.margin = margin(1, 1, 1, 1),
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90, hjust = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.1, 0.9)) +
+  scale_x_continuous(breaks = seq(-70.247, -70.224, by=0.005), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+  ggsn::scalebar(x.min = -70.2485, x.max = -70.240,
+                 y.min = 44.1462, y.max = 44.149, 
+                 dist = 250, model = 'WGS84',
+                 transform = T, dist_unit = "m", box.fill = c("black", "white"), st.color = "black",
+                 location = "bottomleft", height = 0.13, st.size = 4, st.dist = 0.15) +
+  ylab("") +
+  xlab("")
+
+# Figure 2c: China Lake
+
+fig2cChn <- get_stadiamap(china, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), color = "black", size=1, shape = 10,
+             data = chn05Oct21) +
+  geom_point(aes(x = -69.605292, y = 44.445542), pch = 21, size = 10, color = "black", fill = "white") +
+  annotate(geom = "text", x = -69.605292, y = 44.445542, colour = "black", size = 4, label = "L", fontface = "bold") + # Boat Launch
+  geom_point(aes(x = -69.60118, y = 44.44414), pch = 21, size = 10, color = "black", fill = "white") +
+  annotate(geom = "text", x = -69.60118, y = 44.44414, colour = "black", size = 4, label = "P", fontface = "bold") + # Water Intake Pipe
+  theme(text = element_text(size=14, color = "black"), plot.margin = margin(1, 1, 1, 1),
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90, hjust = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.1, 0.9)) +
+  scale_x_continuous(breaks = seq(-69.606, -69.602, by=0.004), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(44.442, 44.446, by = 0.002), expand=expansion(0,0)) +
+  ggsn::scalebar(x.min = -69.6067, x.max = -69.604,
+                 y.min = 44.4429, y.max = 44.4435, 
+                 dist = 50, model = 'WGS84',
+                 transform = T, dist_unit = "m", box.fill = c("black", "white"), st.color = "black",
+                 location = "bottomleft", height = 0.18, st.size = 4, st.dist = 0.2) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Figure 2d: Sabattus Pond
+
+fig2dSab <- get_stadiamap(sabattus_fig2, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), color = "black", size=1, shape = 10,
+             data = sab26Aug21) +
+  geom_point(aes(x = -70.09111, y = 44.17221), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -70.09111, y = 44.17221, colour = "white", size = 4, label = "T", fontface = "bold") + # Hooper Brook
+  geom_point(aes(x = -70.11182, y = 44.15720), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -70.11182, y = 44.15720, colour = "white", size = 4, label = "T", fontface = "bold") + # West, Northernmost Unnamed Trib
+  geom_point(aes(x = -70.11406, y = 44.15265), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -70.11406, y = 44.15265, colour = "white", size = 4, label = "T", fontface = "bold") + # West, Southernmost Unnamed Trib
+  geom_point(aes(x = -70.08887, y = 44.15488), pch = 21, size = 10, color = "black", fill = "blue") +
+  annotate("text", x = -70.088867, y = 44.15488, colour = "white", size = 4, label = "T", fontface = "bold") + # Eastern Unnamed Trib
+  geom_point(aes(x = -70.10254, y = 44.15569), pch = 21, size = 10, color = "black", fill = "red") +
+  annotate("text", x = -70.10254, y = 44.15569, colour = "black", size = 4, label = "B", fontface = "bold") + # Site 1 Buoy
+  theme(text = element_text(size=14, color = "black"), plot.margin = margin(1, 1, 1, 1),
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90, hjust = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.1, 0.9)) +
+  scale_x_continuous(breaks = seq(-70.12, -70.08, by=0.02), expand=expansion(0,0)) +
+  #scale_y_continuous(breaks = seq(43.41, 43.43, by = 0.01), expand=expansion(0,0)) +
+  ggsn::scalebar(x.min = -70.135, x.max = -70.10,
+                 y.min = 44.121, y.max = 44.13, 
+                 dist = 750, model = 'WGS84',
+                 transform = T, dist_unit = "m", box.fill = c("black", "white"), st.color = "black",
+                 location = "bottomleft", height = 0.16, st.size = 4, st.dist = 0.2) +
+  ylab("") +
+  xlab("Longitude")
+
+# Assemble Figure 2
+
+fig2 <- ggarrange(fig2aSun, fig2bAub, fig2cChn, fig2dSab,
+                   nrow=2, ncol=2, labels = c("a", "b", "c", "d"),
+                   font.label = list(size = 14))
+
+# Figure 3
+
+plot_param <- function(df4, name, sensorError, label, startlim, endlim, remove_x_title = FALSE, remove_y_title = FALSE, remove_x_labels = FALSE) {
+  
+  df4 <- df4 %>% 
+    mutate(plotdate = as.Date.factor(source))
+  
+  plot <- ggplot(data = df4, aes(x = plotdate, y = median.diff, color = lake, fill = lake, shape = lake)) +
+    geom_point(data = df4, aes(x = plotdate, y = median.diff), alpha = 0.6, size = 1.5) +
+    geom_hline(yintercept = 0, color = "grey") +
+    geom_hline(yintercept = sensorError, linetype= "longdash") +
+    geom_hline(yintercept= -(sensorError), linetype= "longdash") +
+    scale_fill_manual(values = c("SUN" = "#2B8DBE", "AUB" = "#7BCCC5", "CHN" = "#B7E6B7", "SAB" = "#7CBE62"),
+                      labels = c("SUN", "AUB", "CHN", "SAB")) +
+    scale_color_manual(values = c("SUN" = "#2B8DBE", "AUB" = "#7BCCC5", "CHN" = "#B7E6B7", "SAB" = "#7CBE62"),
+                       labels = c("SUN", "AUB", "CHN", "SAB")) +
+    scale_shape_manual(values = c("SUN" = 24, "AUB" = 21, "CHN" = 15, "SAB" = 23),
+                       labels = c("SUN", "AUB", "CHN", "SAB")) +  
+    theme(legend.position = "none", 
+          panel.background = element_rect(colour = "black", fill = NA),
+          panel.grid = element_blank(), 
+          axis.text = element_text(size = 10, colour = "black"),
+          legend.key = element_rect(fill = NA), 
+          plot.tag.position = c(0.4, 0.93),
+          plot.tag = element_text(size = 10), 
+          axis.title = element_text(size = 10)) + 
+    labs(x = "", y = "\u394 L-M") +
+    ylim(c(startlim, endlim)) +
+    xlim(as.Date("2021-06-11"), as.Date("2021-10-22")) # Force xlim to span deployment dates to make turbidity match
+  
+  # Remove x-axis title if specified
+  if (remove_x_title) {
+    plot <- plot + labs(x = NULL)
+  }
+  
+  # Remove y-axis title if specified
+  if (remove_y_title) {
+    plot <- plot + labs(y = NULL)
+  }
+  
+  # Make x-axis labels white (invisible) if specified
+  if (remove_x_labels) {
+    plot <- plot + theme(axis.text.x = element_text(colour = "white"))
+  }
+  
+  return(plot)
+}
+
+# Function to calculate mean and median of loiter and movement periods
+center.bydate <- function(df_in,name) {
+  
+  # Calculate the mean travel/loiter at a site on a date, then get the difference between them
+  # df_int = intermediate data frame
+  df_int <- df_in %>%
+    group_by(lake_date, lake, source, siteid, type) %>%
+    # get the mean & then ungroup
+    summarise(mean.x= mean(!!name)) %>% ungroup()
+  
+  # Create a new data frame that makes separate columns for each type
+  df_int_mean <- df_int %>%
+    pivot_wider(id_cols=c("lake_date","lake", "source", "siteid"),names_from = type, values_from = mean.x) %>%
+    # Calculate the difference between loitering and moving at each site
+    mutate(mean.loiter=loiter,
+           mean.movement=movement,
+           mean.diff=loiter-movement,
+           mean.pctdiff=mean.diff/loiter) %>%
+    select(lake_date, lake, source, siteid, mean.loiter, mean.movement, mean.diff, mean.pctdiff)
+  
+  # Calculate the median travel/loiter at a site on a date, then get the difference between them
+  # df_int = intermediate data frame
+  df_int <- df_in %>%
+    # group by sample date/source, site ID, and type of movement (loiter/travel)
+    group_by(lake_date, lake, source, siteid, type) %>%
+    # get the mean & then ungroup
+    summarise(median.x= median(!!name)) %>% ungroup()
+  
+  # Create a new data frame that makes separate columns for each type
+  df_int_median <- df_int %>%
+    pivot_wider(id_cols=c("lake_date","lake", "source","siteid"),names_from = type, values_from = median.x) %>%
+    # calculate the difference between loitering and moving at each site
+    mutate(median.loiter=loiter,
+           median.movement=movement,
+           median.diff=loiter-movement,
+           median.pctdiff=median.diff/loiter) %>%
+    select(lake_date, lake, source, siteid, median.loiter, median.movement, median.diff, median.pctdiff)
+  
+  # Combine the means & medians
+  df_int_both=full_join(df_int_mean, df_int_median, by=c("lake_date", "lake", "source","siteid"))
+  
+  # Return the updated matrix
+  center.bydate <- df_int_both
+  
+} # end function
+
+# Define sensor accuracy ranges (from YSI EXO Manual)
+
+dissolvedOxygen <- 0.1
+turbidity <- 0.3
+temperature <- 0.2
+specificConductance <- 2.0
+pH <- 0.2
+
+chlorophyll_calc <- center.bydate(df_to_fxns, quo(chlorophyll_a_RFU))
+chlorophyll_calc <- subset(chlorophyll_calc, (!is.na(chlorophyll_calc$mean.diff) & !is.na(chlorophyll_calc$median.diff)))
+
+chlorophyll <- chlorophyll_calc %>% #chlorophyll gets its own code because sensorError = NA
+  mutate(plotdate=as.Date.factor(source))
+
+chlorophyll <- chlorophyll %>%
+  mutate(lake = factor(lake, levels = c("SUN", "AUB", "CHN", "SAB")))  # Reorder lake factor levels to have legend in order of trophic status
+
+chlorophyll_plot <- ggplot(data=chlorophyll, aes(x=plotdate, y=median.diff, color = lake, fill = lake, shape = lake)) +
+  geom_point(data=chlorophyll, aes(x=plotdate, y=median.diff), alpha = 0.6, size = 1.5) +
+  geom_hline(yintercept= 0, color = "grey") +
+  scale_fill_manual(values = c("SUN" = "#2B8DBE", "AUB" = "#7BCCC5", "CHN" = "#B7E6B7", "SAB" = "#7CBE62"),
+                    labels = c("SUN", "AUB", "CHN", "SAB")) +
+  scale_color_manual(values = c("SUN" = "#2B8DBE", "AUB" = "#7BCCC5", "CHN" = "#B7E6B7", "SAB" = "#7CBE62"),
+                     labels = c("SUN", "AUB", "CHN", "SAB")) +
+  scale_shape_manual(values = c("SUN" = 24, "AUB" = 21, "CHN" = 15, "SAB" = 23),
+                     labels = c("SUN", "AUB", "CHN", "SAB")) +
+  theme(legend.position = c(0.5, 0.2), 
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid = element_blank(), 
+        axis.text = element_text(size = 10, colour = "black"), 
+        plot.tag = element_text(size = 8), 
+        axis.title = element_text(size = 10),
+        legend.direction = "vertical", 
+        legend.title = element_blank(),
+        legend.key = element_blank(),
+        legend.text = element_text(size = 8),
+        legend.spacing.x = unit(1.0, 'mm')) + 
+  guides(fill=guide_legend(ncol=2)) +
+  xlab("") +
+  ylab("") +
+  ylim(c(-0.5, 0.5))
+
+dissolvedOxygen_calc <- center.bydate(df_to_fxns, quo(oxygenDissolved_mgl))
+dissolvedOxygen_calc <- subset(dissolvedOxygen_calc, (!is.na(dissolvedOxygen_calc$mean.diff) & !is.na(dissolvedOxygen_calc$median.diff)))
+dissolvedOxygen_plot <- plot_param(dissolvedOxygen_calc, quo(dissolvedOxygen_mgl), sensorError = dissolvedOxygen, "D.O. (mg/L)", -0.5, 0.5, remove_y_title = TRUE)
+
+pH_calc <- center.bydate(df_to_fxns, quo(pH))
+pH_calc <- subset(pH_calc, (!is.na(pH_calc$mean.diff) & !is.na(pH_calc$median.diff)))
+pH_plot <- plot_param(pH_calc, quo(pH), sensorError = pH, "pH", -0.5, 0.5, remove_y_title = TRUE)
+
+specificConductance_calc <- center.bydate(df_to_fxns, quo(specificConductance_uscm))
+specificConductance_calc <- subset(specificConductance_calc, (!is.na(specificConductance_calc$mean.diff) & !is.na(specificConductance_calc$median.diff)))
+specificConductance_plot <- plot_param(specificConductance_calc, quo(specificConductance_uscm), sensorError = specificConductance, paste0("Sp.Cond. (", "\u00B5", "S/cm)"), -2, 2)
+
+temperature_calc <- center.bydate(df_to_fxns, quo(temperatureWater_degC))
+temperature_calc <- subset(temperature_calc, (!is.na(temperature_calc$mean.diff) & !is.na(temperature_calc$median.diff)))
+temperature_plot <- plot_param(temperature_calc, quo(temperatureWater_degC), sensorError = temperature, "Temp. (C)", -0.5, 0.5)
+
+turbidity_calc <- center.bydate(df_to_fxns, quo(turbidity_NTU))
+turbidity_calc <- subset(turbidity_calc, (!is.na(turbidity_calc$mean.diff) & !is.na(turbidity_calc$median.diff)))
+turbidity_plot <- plot_param(turbidity_calc, quo(turbidity_NTU), sensorError = turbidity, "Turb. (NTU)", -2.1, 2.1, remove_y_title = TRUE)
+
+# Calculate number outside sensor range of error
+dissolvedOxygen_calc_traveleffects <- dissolvedOxygen_calc %>% 
+  mutate(pass = case_when(median.diff < -dissolvedOxygen | median.diff > dissolvedOxygen ~ 1,
+                          TRUE ~ 0))
+dissolvedOxygen_calc_traveleffects_fails <- sum(dissolvedOxygen_calc_traveleffects$pass)
+
+pH_calc_traveleffects <- pH_calc %>% 
+  mutate(pass = case_when(median.diff < -pH | median.diff > pH ~ 1,
+                          TRUE ~ 0))
+pH_calc_traveleffects_fails <- fail <- sum(pH_calc_traveleffects$pass)
+
+specificConductance_calc_traveleffects <- specificConductance_calc %>% 
+  mutate(pass = case_when(median.diff < -specificConductance | median.diff > specificConductance ~ 1,
+                          TRUE ~ 0))
+specificConductance_calc_traveleffects_fails <- sum(specificConductance_calc_traveleffects$pass)
+
+temperature_calc_traveleffects <- temperature_calc %>% 
+  mutate(pass = case_when(median.diff < -temperature | median.diff > temperature ~ 1,
+                          TRUE ~ 0))
+temperature_calc_traveleffects_fails <- sum(temperature_calc_traveleffects$pass)
+
+turbidity_calc_traveleffects <- turbidity_calc %>% 
+  mutate(pass = case_when(median.diff < -turbidity | median.diff > turbidity ~ 1,
+                          TRUE ~ 0))
+turbidity_calc_traveleffects_fails <- sum(turbidity_calc_traveleffects$pass)
+
+sum(c(dissolvedOxygen_calc_traveleffects_fails, pH_calc_traveleffects_fails,
+      specificConductance_calc_traveleffects_fails, temperature_calc_traveleffects_fails,
+      turbidity_calc_traveleffects_fails)) / sum(c(nrow(dissolvedOxygen_calc), 
+                                                   nrow(pH_calc),
+                                                   nrow(specificConductance_calc),
+                                                   nrow(temperature_calc),
+                                                   nrow(turbidity_calc)))*100
+
+# Assemble Figure 3
+
+fig3 <- ggarrange(temperature_plot, dissolvedOxygen_plot, pH_plot, specificConductance_plot, turbidity_plot, chlorophyll_plot,
+                  nrow=2, ncol=3, align = "v", labels = c("a", "b", "c", "d", "e", "f"),
+                  font.label = list(size = 10))
+
+# Format files for next set of plots
+
+sun11Jun21.HC <- sun11Jun21.HC %>% 
+  mutate(turbidity_NTU = NA) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg) 
+
+sun11Jun21.NW <- sun11Jun21.NW %>% 
+  mutate(turbidity_NTU = NA) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun11Jun21 <- rbind(sun11Jun21.HC, sun11Jun21.NW) %>% 
+  mutate(turbidity_NTU = NA) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun15Jun21 <- rbind(sun15Jun21.HC, sun15Jun21.NW) %>% 
+  mutate(turbidity_NTU = NA) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun21Jun21 <- rbind(sun21Jun21.HC, sun21Jun21.NW) %>% 
+  mutate(turbidity_NTU = NA) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun01Jul21.HC <- sun01Jul21.HC %>% 
+  mutate(turbidity_NTU = NA) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun22Jul21 <- rbind(sun22Jul21.HC, sun22Jul21.NW) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun05Aug21 <- rbind(sun05Aug21.HC, sun05Aug21.NW) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun10Aug21 <- rbind(sun10Aug21.HC, sun10Aug21.NW) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun27Aug21.HC <- sun27Aug21.HC %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun27Aug21.NW <- sun27Aug21.NW %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun27Aug21 <- rbind(sun27Aug21.HC, sun27Aug21.NW) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+sun16Sep21 <- rbind(sun16Sep21.HC, sun16Sep21.NW) %>% 
+  select(date, lake, chlorophyll_a_RFU, oxygenDissolved_mgl, pH, 
+         specificConductance_uscm, temperatureWater_degC, turbidity_NTU, 
+         timestamp_sonde_sec, velocity_gps_mps, latitude_gps_deg, longitude_gps_deg)
+
+# Join dataframes by lake for plotting
+auburn_all <- aub30Aug21
+china_all <- rbind(chn06Aug21, chn28Sep21, chn05Oct21, chn12Oct21, chn21Oct21)
+sabattus_all <- rbind(sab20Aug21, sab26Aug21)
+sunapee_all <- rbind(sun11Jun21, sun15Jun21, sun21Jun21, sun01Jul21.HC, 
+                     sun22Jul21, sun05Aug21, sun10Aug21, sun27Aug21, sun16Sep21)
+
+# Moving window for visualizations
+
+asv_window <- function(df, parameter, window_size_sec){ #parameter should not be entered within quotation marks
+  
+  parameter <- enquo(parameter)
+  
+  df2 <- df %>% 
+    mutate(date = as.POSIXct(timestamp_sonde_sec, origin = "1970-01-01"))
+  
+  window <- rollply(df2, ~ date, wdw.size = window_size_sec,
+                    dplyr::summarize, mean = mean(!!parameter, na.rm = TRUE),)
+  
+  return(window)
+}
+
+# Figure 4 - Sabattus upwelling
+
+waypoints_sab26Aug21 <- sab26Aug21 %>% 
+  select(latitude_gps_deg, longitude_gps_deg, timestamp_sonde_sec, waypoint_seq) %>% 
+  na.omit() %>% 
+  mutate(waypoint_seq = ifelse(row_number() == 10, "10", waypoint_seq))
+
+# Figure 4: Sabattus temperature map
+
+sab_temp <- get_stadiamap(sabattus_large, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+             data = sab26Aug21) +
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), pch = 21, size = 6, color = "black", fill = "white",
+             data = waypoints_sab26Aug21) +
+  geom_text(aes(x = longitude_gps_deg, y = latitude_gps_deg, label = waypoint_seq), size=4, color = "black",
+            data = waypoints_sab26Aug21) +
+  annotate("point", x = -70.09111, y = 44.17221, colour = "blue", size = 3) + # Hooper Brook
+  annotate("point", x = -70.10254, y = 44.15569, colour = "red", size = 4) + # Site 1 Buoy
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sab26Aug21$temperatureWater_degC, na.rm = T)-min(sab26Aug21$temperatureWater_degC, na.rm = T))/2)+min(sab26Aug21$temperatureWater_degC, na.rm = T),
+                        name="\u00B0C") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        axis.text = element_text(color = "black", size = 14), axis.text.x = element_text(vjust = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.margin = margin(1, 1, 1, 1), 
+        axis.text.y = element_text(angle = 90, hjust = 0.5), legend.key.width = unit(6, "mm"), legend.key.height = unit(15, "mm"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 14, color = "black"))+
+  scale_x_continuous(breaks = seq(-70.12, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  ggsn::scalebar(x.min = -70.126, x.max = -70.08,
+                 y.min = 44.12, y.max = 44.13, 
+                 dist = 750, model = 'WGS84',
+                 transform = T, dist_unit = "m", box.fill = c("black", "white"), st.color = "black",
+                 location = "bottomleft", height = 0.15, st.size = 3.5, st.dist = 0.2)
+
+# Figure 4: Sabattus DO map
+
+sab_do <- get_stadiamap(sabattus_large, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+             data = sab26Aug21) +
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), pch = 21, size = 6, color = "black", fill = "white",
+             data = waypoints_sab26Aug21) +
+  geom_text(aes(x = longitude_gps_deg, y = latitude_gps_deg, label = waypoint_seq), size=4, color = "black",
+            data = waypoints_sab26Aug21) +
+  annotate("point", x = -70.09111, y = 44.17221, colour = "blue", size = 3) + # Hooper Brook
+  annotate("point", x = -70.10254, y = 44.15569, colour = "red", size = 4) + # Site 1 Buoy
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sab26Aug21$oxygenDissolved_mgl, na.rm = T)-min(sab26Aug21$oxygenDissolved_mgl, na.rm = T))/2)+min(sab26Aug21$oxygenDissolved_mgl, na.rm = T),
+                        name="mg/L") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        axis.text = element_text(color = "black", size = 14), axis.text.x = element_text(vjust = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.margin = margin(1, 1, 1, 1), 
+        axis.text.y = element_text(angle = 90, hjust = 0.5), legend.key.width = unit(6, "mm"), legend.key.height = unit(15, "mm"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 14, color = "black"))+
+  scale_x_continuous(breaks = seq(-70.12, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Figure 4: Sabattus timeseries
+
+sab_buoy_miniDOT <- read.csv("https://www.dropbox.com/scl/fi/7svxzbgx3e1r6musft45y/Sabattus_miniDOT_1m_buoy_2021.csv?rlkey=5ywfk71neev85as051r4ay5oy&dl=1", header = T)
+
+sab_robot_temp <- sab26Aug21 %>% 
+  select(timestamp_sonde_sec, temperatureWater_degC, latitude_gps_deg, longitude_gps_deg) %>% 
+  rename(temperatureWater_degC_robot = temperatureWater_degC) %>% 
+  rename(unix = timestamp_sonde_sec)
+
+sab_buoy_temp <- sab_buoy_miniDOT %>% 
+  select(Unix_Timestamp, Temperature_C) %>% 
+  rename(temperatureWater_degC_buoy = Temperature_C) %>% 
+  rename(unix = Unix_Timestamp) #clean up buoy dataframe to align with robot dataframe temp
+
+sab_buoy_temp_deployment <- left_join(sab_robot_temp, sab_buoy_temp, by = "unix") %>% 
+  select(unix, temperatureWater_degC_robot, temperatureWater_degC_buoy, latitude_gps_deg, longitude_gps_deg) #this file lines up common denominator times
+
+waypoints_sab_buoy_temp_deployment <- merge(sab_buoy_temp_deployment, waypoints_sab26Aug21)
+
+sab_robot_do <- sab26Aug21 %>% 
+  select(timestamp_sonde_sec, oxygenDissolved_mgl, latitude_gps_deg, longitude_gps_deg) %>% 
+  rename(oxygenDissolved_mgl_robot = oxygenDissolved_mgl) %>% 
+  rename(unix = timestamp_sonde_sec)
+
+sab_buoy_do <- sab_buoy_miniDOT %>% 
+  select(Unix_Timestamp, Dissolved_Oxygen_mgL) %>% 
+  rename(oxygenDissolved_mgl_buoy = Dissolved_Oxygen_mgL) %>% 
+  rename(unix = Unix_Timestamp) #clean up buoy dataframe to align with robot dataframe DO
+
+sab_buoy_do_deployment <- left_join(sab_robot_do, sab_buoy_do, by = "unix") %>% 
+  select(unix, oxygenDissolved_mgl_robot, oxygenDissolved_mgl_buoy, latitude_gps_deg, longitude_gps_deg) #this file lines up common denominator times
+
+waypoints_sab_buoy_do_deployment <- merge(sab_buoy_do_deployment, waypoints_sab26Aug21)
+
+# Figure 4: Sabattus buoy/robot temperature timeseries
+
+sab_temp_time <- ggplot() + 
+  geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = temperatureWater_degC, 
+                                    color = temperatureWater_degC), size = 2)+
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sab26Aug21$temperatureWater_degC, na.rm = T)-min(sab26Aug21$temperatureWater_degC, na.rm = T))/2)+min(sab26Aug21$temperatureWater_degC, na.rm = T),
+                        name="\u00B0C") +
+  geom_line(data = asv_window(sab26Aug21, temperatureWater_degC, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="America/Virgin"), y = mean), 
+            color = 'black', size=1)+
+  geom_point(data = sab_buoy_temp_deployment, aes(x = as.POSIXct(unix, origin="1970-01-01", tz = "America/Virgin"), 
+                                                  y = temperatureWater_degC_buoy), size = 4, color = "red")+
+  geom_point(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = temperatureWater_degC_robot),
+             size=6, pch = 21, color = "black", fill = "white", data = waypoints_sab_buoy_temp_deployment) +
+  geom_text(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), label = waypoint_seq, y = temperatureWater_degC_robot),
+            size=4, color = "black", data = waypoints_sab_buoy_temp_deployment) +
+  theme_bw()+
+  xlab("Timestamp") + 
+  theme(legend.position = "none", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(6, "mm"), plot.margin = margin(1, 1, 1, 1),
+        plot.title = element_text(size = 14, color = "black"), axis.text = element_text(color = "black", size = 12),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.38, 0.45),
+        axis.text.x = element_text(vjust = 0.5), panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  scale_x_datetime(breaks = scales::date_breaks("1 hour"), date_labels = "%H:%M")+
+  xlab("EDT (UTC-4:00)")+
+  ylab("Temp. (\u00B0C)")
+
+# Figure 4: Sabattus buoy/robot DO timeseries
+
+sab_do_time <- ggplot() + 
+  geom_point(data = sab26Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = oxygenDissolved_mgl, 
+                                    color = oxygenDissolved_mgl), size = 2)+
+  geom_line(data = asv_window(sab26Aug21, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="America/Virgin"), y = mean), 
+            color = 'black', size=1)+
+  geom_point(data = sab_buoy_do_deployment, aes(x = as.POSIXct(unix, origin="1970-01-01", tz = "America/Virgin"), 
+                                                y = oxygenDissolved_mgl_buoy), size = 4, color = "red")+
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sab26Aug21$oxygenDissolved_mgl, na.rm = T)-min(sab26Aug21$oxygenDissolved_mgl, na.rm = T))/2)+min(sab26Aug21$oxygenDissolved_mgl, na.rm = T),
+                        name="mg/L") +
+  geom_point(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = oxygenDissolved_mgl_robot),
+             size=6, pch = 21, color = "black", fill = "white", data = waypoints_sab_buoy_do_deployment) +
+  geom_text(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), label = waypoint_seq, y = oxygenDissolved_mgl_robot),
+            size=4, color = "black", data = waypoints_sab_buoy_do_deployment) +
+  theme_bw()+
+  xlab("Timestamp") + 
+  theme(legend.position = "none", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(6, "mm"), plot.margin = margin(1, 1, 1, 1),
+        plot.title = element_text(size = 14, color = "black"), axis.text = element_text(color = "black", size = 12),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.38, 0.45),
+        axis.text.x = element_text(vjust = 0.5), panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  scale_x_datetime(breaks = scales::date_breaks("1 hour"), date_labels = "%H:%M")+
+  xlab("EDT (UTC-4:00)")+
+  ylab("D.O. (mg/L)")
+
+# Assemble Figure 4
+
+fig4 <- ggarrange(NULL, sab_temp, NULL, sab_temp_time, #NULL is a placeholder to add space between panels where needed
+                   NULL, NULL, NULL, NULL,
+                   NULL, sab_do, NULL, sab_do_time, 
+                   ncol=4, nrow = 3, align = "hv", widths = c(1, 1, 0.1, 1), heights = c(1, 0.1, 1),
+                   labels = c("", "a", "", "b",
+                              "", "", "", "",
+                              "", "c", "", "d")) +
+  theme(plot.margin = margin(.1, .1, .1, .1, "cm"))
+
+# Figure 5
+
+# Figure 5: Auburn temperature map
+
+aub_temp <- get_stadiamap(auburn, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+             data = aub30Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$temperatureWater_degC, na.rm = T)-min(aub30Aug21$temperatureWater_degC, na.rm = T))/2)+min(aub30Aug21$temperatureWater_degC, na.rm = T),
+                        name="\u00B0C", labels=function(x) paste0(format(round(x, 1)))) +
+  annotate("point", x = -70.24266, y = 44.15925, colour = "blue", size = 3) + # Townsend Brook
+  annotate("point", x = -70.243661, y = 44.158278, colour = "red", size = 4) + # Site 5 Buoy
+  annotate("point", x = -70.24085, y = 44.15262, colour = "white", size = 8, shape = 1) + # Hotspot
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), pch = 21, size = 6, color = "black", fill = "white",
+             data = waypoints_aub30Aug21) +
+  geom_text(aes(x = longitude_gps_deg, y = latitude_gps_deg, label = waypoint_seq), size=4, color = "black",
+            data = waypoints_aub30Aug21) +
+  theme(legend.position = "right", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"),legend.key.height = unit(12, "mm"), axis.text.y = element_text(angle = 90, hjust = 0.5),
+        plot.title = element_text(size = 12, color = "black"), axis.text=element_text(colour="black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.90, 0.90)) +
+  scale_x_continuous(breaks = seq(-70.247, -70.234, by=0.005), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+  ylab("Latitude") +
+  xlab("") +
+  ggsn::scalebar(x.min = -70.249, x.max = -70.242,
+                 y.min = 44.1465, y.max = 44.149, 
+                 dist = 250, model = 'WGS84',
+                 transform = T, dist_unit = "m", box.fill = c("black", "white"), st.color = "black",
+                 location = "bottomleft", height = 0.2, st.size = 4, st.dist = 0.2)
+
+# Figure 5: Auburn DO map
+
+aub_do <- get_stadiamap(auburn, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+             data = aub30Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$oxygenDissolved_mgl, na.rm = T)-min(aub30Aug21$oxygenDissolved_mgl, na.rm = T))/2)+min(aub30Aug21$oxygenDissolved_mgl, na.rm = T),
+                        name="mg/L") +
+  annotate("point", x = -70.243661, y = 44.158278, colour = "red", size = 4) + # Site 5 Buoy
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), pch = 21, size = 6, color = "black", fill = "white",
+             data = waypoints_aub30Aug21) +
+  geom_text(aes(x = longitude_gps_deg, y = latitude_gps_deg, label = waypoint_seq), size=4, color = "black",
+            data = waypoints_aub30Aug21) +
+  annotate("point", x = -70.24266, y = 44.15925, colour = "blue", size = 3) + # Townsend Brook
+  annotate("point", x = -70.24085, y = 44.15262, colour = "white", size = 8, shape = 1) + # Hotspot
+  theme(legend.position = "right", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"),legend.key.height = unit(12, "mm"), axis.text.y = element_text(angle = 90, hjust = 0.5),
+        plot.title = element_text(size = 12, color = "black"), axis.text=element_text(colour="black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.90, 0.90)) +
+  scale_x_continuous(breaks = seq(-70.247, -70.234, by=0.005), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+  ylab("Latitude") +
+  xlab("")
+
+# Figure 5: Auburn pH map
+
+aub_pH <- get_stadiamap(auburn, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+             data = aub30Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$pH, na.rm = T)-min(aub30Aug21$pH, na.rm = T))/2)+min(aub30Aug21$pH, na.rm = T),
+                        name="pH") +
+  annotate("point", x = -70.24266, y = 44.15925, colour = "blue", size = 3) + # Townsend Brook
+  annotate("point", x = -70.24085, y = 44.15262, colour = "white", size = 8, shape = 1) + # Hotspot
+  theme(legend.position = "right", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"),legend.key.height = unit(12, "mm"), axis.text.y = element_text(angle = 90, hjust = 0.5),
+        plot.title = element_text(size = 12, color = "black"), axis.text=element_text(colour="black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.90, 0.90))+
+  scale_x_continuous(breaks = seq(-70.247, -70.234, by=0.005), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+  ylab("Latitude") +
+  xlab("")
+
+# Figure 5: Auburn specific conductance map
+
+aub_spc <- get_stadiamap(auburn, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = aub30Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$specificConductance_uscm, na.rm = T)-min(aub30Aug21$specificConductance_uscm, na.rm = T))/2)+min(aub30Aug21$specificConductance_uscm, na.rm = T),
+                        name="uS/cm", labels=function(x) paste0(format(round(x, 1)))) +
+  annotate("point", x = -70.24266, y = 44.15925, colour = "blue", size = 3) + # Townsend Brook
+  annotate("point", x = -70.24085, y = 44.15262, colour = "white", size = 8, shape = 1) + # Hotspot
+  theme(legend.position = "right", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"),legend.key.height = unit(12, "mm"), axis.text.y = element_text(angle = 90, hjust = 0.5),
+        plot.title = element_text(size = 12, color = "black"), axis.text=element_text(colour="black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.90, 0.90))+
+  scale_x_continuous(breaks = seq(-70.247, -70.234, by=0.005), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Figure 5: Auburn buoy and robot timeseries
+
+waypoints_aub30Aug21 <- aub30Aug21 %>% 
+  select(latitude_gps_deg, longitude_gps_deg, timestamp_sonde_sec, waypoint_seq) %>% 
+  na.omit() %>% 
+  mutate(waypoint_seq = ifelse(row_number() == 10, "10", waypoint_seq))
+
+aub_buoy_miniDOT <- read.csv("https://www.dropbox.com/scl/fi/9mt3xmgm6xrah9ii548to/Auburn_miniDOT_1m_buoy_2021.csv?rlkey=43bzvi2byc80fis8vvylx032r&dl=1", header = T)
+
+aub_robot_temp <- aub30Aug21 %>% 
+  select(timestamp_sonde_sec, temperatureWater_degC, latitude_gps_deg, longitude_gps_deg) %>% 
+  rename(temperatureWater_degC_robot = temperatureWater_degC) %>% 
+  rename(unix = timestamp_sonde_sec)
+
+aub_buoy_temp <- aub_buoy_miniDOT %>% 
+  select(Unix_Timestamp, Temperature_C) %>% 
+  rename(temperatureWater_degC_buoy = Temperature_C) %>% 
+  rename(unix = Unix_Timestamp)
+
+aub_buoy_temp_deployment <- left_join(aub_robot_temp, aub_buoy_temp, by = "unix") %>% 
+  select(unix, temperatureWater_degC_robot, temperatureWater_degC_buoy, latitude_gps_deg, longitude_gps_deg) #this file lines up common denominator times
+
+aub_robot_do <- aub30Aug21 %>% 
+  select(timestamp_sonde_sec, oxygenDissolved_mgl, latitude_gps_deg, longitude_gps_deg) %>% 
+  rename(oxygenDissolved_mgl_robot = oxygenDissolved_mgl) %>% 
+  rename(unix = timestamp_sonde_sec)
+
+aub_buoy_do <- aub_buoy_miniDOT %>% 
+  select(Unix_Timestamp, Dissolved_Oxygen_mgL) %>% 
+  rename(oxygenDissolved_mgl_buoy = Dissolved_Oxygen_mgL) %>% 
+  rename(unix = Unix_Timestamp)
+
+aub_buoy_do_deployment <- left_join(aub_robot_do, aub_buoy_do, by = "unix") %>% 
+  select(unix, oxygenDissolved_mgl_robot, oxygenDissolved_mgl_buoy, latitude_gps_deg, longitude_gps_deg) #this file lines up common denominator times
+
+waypoints_aub_buoy_temp_deployment <- merge(aub_buoy_temp_deployment, waypoints_aub30Aug21)
+
+waypoints_aub_buoy_do_deployment <- merge(aub_buoy_do_deployment, waypoints_aub30Aug21)
+
+# Figure 5: Auburn buoy/robot temperature timeseries
+
+aub_temp_time <- ggplot() + 
+  geom_point(data = aub30Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = temperatureWater_degC, 
+                                    color = temperatureWater_degC), size = 2)+
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$temperatureWater_degC, na.rm = T)-min(aub30Aug21$temperatureWater_degC, na.rm = T))/2)+min(aub30Aug21$temperatureWater_degC, na.rm = T),
+                        name="\u00B0C") +
+  geom_line(data = asv_window(aub30Aug21, temperatureWater_degC, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="America/Virgin"), y = mean), 
+            color = 'black', size=1)+
+  geom_point(data = aub_buoy_temp_deployment, aes(x = as.POSIXct(unix, origin="1970-01-01", tz = "America/Virgin"), 
+                                                  y = temperatureWater_degC_buoy), size = 4, color = "red")+
+  geom_point(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = temperatureWater_degC_robot),
+             size=6, pch = 21, color = "black", fill = "white", data = waypoints_aub_buoy_temp_deployment) +
+  geom_text(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), label = waypoint_seq, y = temperatureWater_degC_robot),
+            size=4, color = "black", data = waypoints_aub_buoy_temp_deployment) +
+  theme_bw()+
+  theme(legend.position = "none", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"), plot.margin = margin(1, 1, 1, 1), 
+        plot.title = element_text(size = 14, color = "black"), axis.text = element_text(color = "black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.38, 0.45),
+        axis.text.x = element_text(vjust = 0.5))+
+  scale_x_datetime(breaks = scales::date_breaks("1 hour"), date_labels = "%H:%M")+
+  ylab("Temp. (\u00B0C)") +
+  xlab("")
+
+# Figure 5: Auburn buoy/robot DO timeseries
+
+aub_do_time <- ggplot() + 
+  geom_point(data = aub30Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = oxygenDissolved_mgl, 
+                                    color = oxygenDissolved_mgl), size = 2)+
+  geom_line(data = asv_window(aub30Aug21, oxygenDissolved_mgl, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="America/Virgin"), y = mean), 
+            color = 'black', size=1)+
+  geom_point(data = aub_buoy_do_deployment, aes(x = as.POSIXct(unix, origin="1970-01-01", tz = "America/Virgin"), 
+                                                y = oxygenDissolved_mgl_buoy), size = 4, color = "red")+
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$oxygenDissolved_mgl, na.rm = T)-min(aub30Aug21$oxygenDissolved_mgl, na.rm = T))/2)+min(aub30Aug21$oxygenDissolved_mgl, na.rm = T),
+                        name="mg/L") +
+  geom_point(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = oxygenDissolved_mgl_robot),
+             size=6, pch = 21, color = "black", fill = "white", data = waypoints_aub_buoy_do_deployment) +
+  geom_text(aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), label = waypoint_seq, y = oxygenDissolved_mgl_robot),
+            size=4, color = "black", data = waypoints_aub_buoy_do_deployment) +
+  theme_bw()+
+  theme(legend.position = "none", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"), plot.margin = margin(1, 1, 1, 1),
+        plot.title = element_text(size = 14, color = "black"), axis.text = element_text(color = "black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.38, 0.45),
+        axis.text.x = element_text(vjust = 0.5))+
+  scale_x_datetime(breaks = scales::date_breaks("1 hour"), date_labels = "%H:%M")+
+  ylab("D.O. (mg/L)") +
+  xlab("")
+
+# Figure 5: Auburn robot pH timeseries
+
+aub_ph_time <- ggplot() + 
+  geom_point(data = aub30Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = pH, 
+                                    color = pH), size = 2)+
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$pH, na.rm = T)-min(aub30Aug21$pH, na.rm = T))/2)+min(aub30Aug21$pH, na.rm = T),
+                        name="pH") +
+  geom_line(data = asv_window(aub30Aug21, pH, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="America/Virgin"), y = mean), 
+            color = 'black', size=1)+
+  theme_bw()+
+  theme(legend.position = "none", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"), plot.margin = margin(1, 1, 1, 1), 
+        plot.title = element_text(size = 14, color = "black"), axis.text = element_text(color = "black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.38, 0.45),
+        axis.text.x = element_text(vjust = 0.5))+
+  scale_x_datetime(breaks = scales::date_breaks("1 hour"), date_labels = "%H:%M")+
+  ylab("pH") +
+  xlab("")
+
+# Figure 5: Auburn robot specific conductance timeseries
+
+aub_spc_time <- ggplot() + 
+  geom_point(data = aub30Aug21, aes(x = as.POSIXct(timestamp_sonde_sec, origin="1970-01-01", tz = "America/Virgin"), y = specificConductance_uscm, 
+                                    color = specificConductance_uscm), size = 2)+
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(aub30Aug21$specificConductance_uscm, na.rm = T)-min(aub30Aug21$specificConductance_uscm, na.rm = T))/2)+min(aub30Aug21$specificConductance_uscm, na.rm = T),
+                        name="") +
+  geom_line(data = asv_window(aub30Aug21, specificConductance_uscm, 120), aes(x = as.POSIXct(date, origin="1970-01-01", tz="America/Virgin"), y = mean), 
+            color = 'black', size=1)+
+  theme_bw()+
+  xlab("Timestamp") + 
+  theme(legend.position = "none", text = element_text(size=18, color = "black"),
+        legend.key.width = unit(6, "mm"), plot.margin = margin(1, 1, 1, 1), 
+        plot.title = element_text(size = 14, color = "black"), axis.text = element_text(color = "black"),
+        legend.text = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.38, 0.45),
+        axis.text.x = element_text(vjust = 0.5))+
+  scale_x_datetime(breaks = scales::date_breaks("1 hour"), date_labels = "%H:%M")+
+  xlab("EDT (UTC-4:00)")+
+  ylab("Sp. Cond. (μS/cm)")
+
+# Arrange Figure 5
+
+fig5 <- ggarrange(aub_temp, aub_temp_time,
+                   aub_do, aub_do_time,
+                   aub_pH, aub_ph_time,
+                   aub_spc, aub_spc_time, hjust = c(-8, 0, -8, 0, -8, 0, -8, 0),
+                   ncol=2, nrow = 4, align = "hv", labels = c("a", "b", "c", "d", "e", "f", "g", "h"))
+
+# Figure 6
+
+# Figure 6: Sunapee June 11
+
+Jun11 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun11Jun21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("a "), "June 11"))) +
+  xlab("") +
+  ylab("Latitude") +
+  ggsn::scalebar(x.min = -72.054, x.max = -72.04,
+                 y.min = 43.4095, y.max = 43.412, 
+                 dist = 400, model = 'WGS84',
+                 transform = T, dist_unit = "m", box.fill = c("black", "white"), st.color = "black",
+                 location = "bottomleft", height = 0.21, st.size = 3, st.dist = 0.3)
+
+# Figure 6: Sunapee June 15
+
+Jun15 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun15Jun21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("b "), "June 15"))) +
+  xlab("") +
+  ylab("")
+
+# Figure 6: Sunapee June 21
+
+Jun21 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun21Jun21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("c "), "June 21"))) +
+  xlab("") +
+  ylab("")
+
+# Figure 6: Sunapee July 1
+
+Jul01 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun01Jul21.HC) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) + 
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("d "), "July 1"))) +
+  xlab("") +
+  ylab("Latitude")
+
+# Figure 6: Sunapee July 22
+
+Jul22 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun22Jul21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("e "), "July 22"))) +
+  xlab("") +
+  ylab("")
+
+# Figure 6: Sunapee August 5
+
+Aug05 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun05Aug21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("f "), "August 5"))) +
+  xlab("") +
+  ylab("")
+
+# Figure 6: Sunapee August 10
+
+Aug10 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun10Aug21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("g "), "August 10"))) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Figure 6: Sunapee August 27
+
+Aug27 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun27Aug21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  ggtitle(label = expression(paste(bold("h "), "August 27"))) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("")
+
+# Figure 6: Sunapee September 16
+
+Sep16 <- get_stadiamap(sunapee, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sun16Sep21) +
+  annotate("point", x = -72.03080, y = 43.40967, colour = "blue", size = 3) +
+  annotate("point", x = -72.03589, y = 43.41281, colour = "blue", size = 3) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sunapee_all$specificConductance_uscm, na.rm = T)-min(sunapee_all$specificConductance_uscm, na.rm = T))/2)+min(sunapee_all$specificConductance_uscm, na.rm = T),
+                        name=paste0("Specific conductance (", "\u00B5", "S/cm)"), limits = c(103.8537, 112.3589)) +
+  theme(legend.position = "bottom", text = element_text(size=12, color = "black"),
+        legend.key.width = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1), plot.tag.position = c(0.1, 0.9),
+        legend.title = element_text(size=16, color = "black"), 
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90),
+        legend.text = element_text(angle = 45, hjust = 0.5, vjust = 0.5, size = 14, color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+  ggtitle(label = expression(paste(bold("i "), "September 16"))) +
+  xlab("Longitude") +
+  ylab("")
+
+# Arrange Figure 6
+
+fig6 <- ggarrange(Jun11, Jun15, Jun21, 
+                  Jul01, Jul22, Aug05,
+                  Aug10, Aug27, Sep16,
+                  ncol=3, nrow = 3, align = "h", common.legend = T, legend="bottom") #Figure 6
+
+#######################################################################
+# SUPPORTING INFORMATION
+#######################################################################
+
+# Figure S1 (Sunapee historic specific conductance)
+
+suppfig1a <- get_stadiamap(sunapee_large, zoom = 16, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg), color = "black", size=0.1, shape = 10,
+             data = sun16Sep21) +
+  geom_point(aes(x = -72.03080, y = 43.40967), pch = 21, size = 10, color = "black", fill = "#EE8866") +
+  annotate("text", x = -72.03080, y = 43.40967, colour = "black", size = 4, label = "830") + # Herrick Cove South
+  geom_point(aes(x = -72.03589, y = 43.41281), pch = 21, size = 10, color = "black", fill = "#FFAABB") +
+  annotate("text", x = -72.03589, y = 43.41281, colour = "black", size = 4, label = "835") + # Herrick Cove North
+  geom_point(aes(x = -72.066, y = 43.430), pch = 21, size = 10, color = "black", fill = "#77AADD") +
+  annotate("text", x = -72.066, y = 43.430, colour = "black", size = 4, label = "505") + # Herrick Cove South
+  geom_point(aes(x = -72.069, y = 43.431), pch = 21, size = 10, color = "black", fill = "#44BB99") +
+  annotate("text", x = -72.069, y = 43.431, colour = "black", size = 4, label = "510") + # Herrick Cove North
+  theme(text = element_text(size=14, color = "black"), plot.margin = margin(1, 1, 1, 1),
+        axis.text.x = element_text(vjust = 0, color = "black", size = 12), axis.text.y = element_text(color = "black", size = 12, angle = 90, hjust = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, size = 2), plot.tag.position = c(0.1, 0.9)) +
+  scale_x_continuous(breaks = seq(-72.07, -72.03, by=0.04), expand=expansion(0,0)) +
+  scale_y_continuous(breaks = seq(43.41, 43.43, by = 0.01), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+historical_spc <- read.csv("LSPALMP_1986-2020_v2021-03-29.csv", header = T) #dataset sourced from Steele et al. 2021 https://doi.org/10.5281/zenodo.4652076 
+
+suppfig1b <- historical_spc %>% 
+  filter(station == 505 | station == 510 | station == 830 | station == 835) %>% 
+  filter(parameter == "cond_uScm") %>% 
+  ggplot()+
+  geom_boxplot(aes(x=as.factor(station), y=value, color=as.factor(station)), whisker.color = "black", whisker.linewidth = 1, outlier.colour = "black")+
+  geom_point(aes(x=as.factor(station), y=value, color=as.factor(station)), alpha = 0.3, size = 3)+
+  scale_color_manual(values = c("#77AADD", "#44BB99", "#EE8866", "#FFAABB"))+
+  theme(legend.position = "none", panel.background=element_rect(colour = "black", linewidth=1, fill = NA),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black", size = 12),
+        legend.key = element_rect(fill = NA), text=element_text(size=14, color = "black"), legend.title = element_blank())+
+  xlab("")+
+  ylab("Conductivity" ~ "(\u00B5S/cm)")
+
+suppfig1 <- ggarrange(suppfig1a, suppfig1b, 
+                       ncol = 2, nrow = 1, labels = c("a", "b"), align = "hv", 
+                       widths = c(1, 1), heights = c(1.2, 1), hjust = (c(-4, 0)))
+
+# Figure S2 (0.5m vs. 1m comparisons manual sonde profile data)
+
+# Sabattus profile data
+
+sab_profile_0.5 <- read.csv("https://www.dropbox.com/scl/fi/da0p0a96rhp2iljgmrpls/2021WorkingSamplingLog.xlsx-YSISondeE2.csv?rlkey=dwulp5c7dwx07r4rilzvgyg0c&dl=1") %>% 
+  select(c(date, lake, site, depth_m, temperature_degC, do_mgl)) %>% 
+  filter(lake == "Sabattus") %>% 
+  filter(depth_m == 0.5) %>% 
+  rename(depth_0.5m = depth_m) %>% 
+  rename(temperature_0.5m = temperature_degC) %>% 
+  rename(do_0.5m = do_mgl)
+
+sab_profile_1 <- read.csv("https://www.dropbox.com/scl/fi/da0p0a96rhp2iljgmrpls/2021WorkingSamplingLog.xlsx-YSISondeE2.csv?rlkey=dwulp5c7dwx07r4rilzvgyg0c&dl=1") %>% 
+  select(c(date, lake, site, depth_m, temperature_degC, do_mgl)) %>% 
+  filter(lake == "Sabattus") %>% 
+  filter(depth_m == 1) %>% 
+  rename(depth_1m = depth_m) %>% 
+  rename(temperature_1m = temperature_degC) %>% 
+  rename(do_1m = do_mgl)
+
+sab_profile <- left_join(sab_profile_0.5, sab_profile_1, by = c("date", "site"))
+
+sab_temp_0.5m_1m <- ggplot() +
+  geom_abline(slope = 1, intercept = 0, color = "grey", alpha = 0.6, size = 2) +
+  geom_point(data = sab_profile, aes(x = temperature_0.5m, y = temperature_1m), color = "red", alpha = 0.6, size = 3) +
+  theme(legend.position = "none", panel.background=element_rect(colour = "black", size=1, fill = NA), legend.text=element_text(size=20),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black"),
+        legend.key = element_rect(fill = NA), text=element_text(size=14, color = "black"), legend.title = element_blank()) +
+  xlab("Sabattus Temp. @ 0.5 m (\u00B0C)") +
+  ylab("Sabattus Temp. @ 1 m (\u00B0C)")
+
+sab_do_0.5m_1m <- ggplot() +
+  geom_abline(slope = 1, intercept = 0, color = "grey", alpha = 0.6, size = 2) +
+  geom_point(data = sab_profile, aes(x = do_0.5m, y = do_1m), color = "blue", alpha = 0.6, size = 3) +
+  theme(legend.position = "none", panel.background=element_rect(colour = "black", size=1, fill = NA), legend.text=element_text(size=20),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black"),
+        legend.key = element_rect(fill = NA), text=element_text(size=14, color = "black"), legend.title = element_blank()) +
+  xlab("Sabattus D.O. @ 0.5 m (mg/L)") +
+  ylab("Sabattus D.O. @ 1 m (mg/L)") +
+  xlim(c(6, 11))
+
+sab_profile_plot <- ggarrange(sab_temp_0.5m_1m, sab_do_0.5m_1m,
+                              labels = c("a", "b"))
+
+# Run correlation test between 0.5 and 1 m temp and DO
+
+cor.test(x = sab_profile$temperature_0.5m, y = sab_profile$temperature_1m) #r=0.994
+cor.test(x = sab_profile$do_0.5m, y = sab_profile$do_1m) #r=0.972
+
+# Auburn profile data
+
+aub_profile_0.5 <- read.csv("https://www.dropbox.com/scl/fi/f67nenjbx5fjxl2hmdkz0/2021WorkingSamplingLog.xlsx-AWDSondeE2.csv?rlkey=oiiv22yyx6mt2dy56abjhtmx8&dl=1") %>% 
+  select(c(date, lake, site, depth_m, temperature_degC, do_mgl)) %>% 
+  filter(lake == "Auburn") %>% 
+  filter(depth_m == 0.5) %>% 
+  rename(depth_0.5m = depth_m) %>% 
+  rename(temperature_0.5m = temperature_degC) %>% 
+  rename(do_0.5m = do_mgl)
+
+aub_profile_1 <- read.csv("https://www.dropbox.com/scl/fi/f67nenjbx5fjxl2hmdkz0/2021WorkingSamplingLog.xlsx-AWDSondeE2.csv?rlkey=oiiv22yyx6mt2dy56abjhtmx8&dl=1") %>% 
+  select(c(date, lake, site, depth_m, temperature_degC, do_mgl)) %>% 
+  filter(lake == "Auburn") %>% 
+  filter(depth_m == 1) %>% 
+  rename(depth_1m = depth_m) %>% 
+  rename(temperature_1m = temperature_degC) %>% 
+  rename(do_1m = do_mgl)
+
+aub_profile <- left_join(aub_profile_0.5, aub_profile_1, by = c("date", "site"))
+
+aub_temp_0.5m_1m <- ggplot() +
+  geom_abline(slope = 1, intercept = 0, color = "grey", alpha = 0.6, size = 2) +
+  geom_point(data = aub_profile, aes(x = temperature_0.5m, y = temperature_1m), color = "red", alpha = 0.6, size = 3) +
+  theme(legend.position = "none", panel.background=element_rect(colour = "black", size=1, fill = NA), legend.text=element_text(size=20),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black"),
+        legend.key = element_rect(fill = NA), text=element_text(size=14, color = "black"), legend.title = element_blank()) +
+  xlab("Auburn Temp. @ 0.5 m (\u00B0C)") +
+  ylab("Auburn Temp. @ 1 m (\u00B0C)")
+
+aub_do_0.5m_1m <- ggplot() +
+  geom_abline(slope = 1, intercept = 0, color = "grey", alpha = 0.6, size = 2) +
+  geom_point(data = aub_profile, aes(x = do_0.5m, y = do_1m), color = "blue", alpha = 0.6, size = 3) +
+  theme(legend.position = "none", panel.background=element_rect(colour = "black", size=1, fill = NA), legend.text=element_text(size=20),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black"),
+        legend.key = element_rect(fill = NA), text=element_text(size=14, color = "black"), legend.title = element_blank()) +
+  xlab("Auburn D.O. @ 0.5 m (mg/L)") +
+  ylab("Auburn D.O. @ 1 m (mg/L)") +
+  xlim(c(6, 11)) +
+  ylim(c(6, 11))
+
+profile_plot <- ggarrange(sab_temp_0.5m_1m, sab_do_0.5m_1m,
+                          aub_temp_0.5m_1m, aub_do_0.5m_1m,
+                          labels = c("a", "b", "c", "d"))
+
+# Run correlation test between 0.5 and 1 m temp and DO
+
+cor.test(x = aub_profile$temperature_0.5m, y = aub_profile$temperature_1m) #r=1.00
+cor.test(x = aub_profile$do_0.5m, y = aub_profile$do_1m) #r=0.995
+
+# Table S2 (total deployment time for each path)
+
+aub30Aug21.time <- difftime(as.POSIXct(aub30Aug21$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(aub30Aug21$timestamp_gps_sec[nrow(aub30Aug21)], origin = "1970-01-01"), units="hours")
+difftime(as.POSIXct(sab20Aug21$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sab20Aug21$timestamp_gps_sec[nrow(sab20Aug21)], origin = "1970-01-01"), units="hours")
+difftime(as.POSIXct(sab26Aug21$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sab26Aug21$timestamp_gps_sec[nrow(sab26Aug21)], origin = "1970-01-01"), units="hours")
+chn06Aug21.time <- difftime(as.POSIXct(chn06Aug21$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(chn06Aug21$timestamp_gps_sec[nrow(chn06Aug21)], origin = "1970-01-01"), units="hours")
+difftime(as.POSIXct(chn05Oct21$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(chn05Oct21$timestamp_gps_sec[nrow(chn05Oct21)], origin = "1970-01-01"), units="hours")
+difftime(as.POSIXct(chn12Oct21$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(chn12Oct21$timestamp_gps_sec[nrow(chn12Oct21)], origin = "1970-01-01"), units="hours")
+difftime(as.POSIXct(chn21Oct21$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(chn21Oct21$timestamp_gps_sec[nrow(chn21Oct21)], origin = "1970-01-01"), units="hours")
+
+abs(difftime(as.POSIXct(sun11Jun21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun11Jun21.HC$timestamp_gps_sec[nrow(sun11Jun21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun11Jun21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun11Jun21.NW$timestamp_gps_sec[nrow(sun11Jun21.NW)], origin = "1970-01-01"), units="hours"))
+abs(difftime(as.POSIXct(sun15Jun21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun15Jun21.HC$timestamp_gps_sec[nrow(sun15Jun21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun15Jun21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun15Jun21.NW$timestamp_gps_sec[nrow(sun15Jun21.NW)], origin = "1970-01-01"), units="hours"))
+abs(difftime(as.POSIXct(sun21Jun21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun21Jun21.HC$timestamp_gps_sec[nrow(sun21Jun21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun21Jun21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun21Jun21.NW$timestamp_gps_sec[nrow(sun21Jun21.NW)], origin = "1970-01-01"), units="hours"))
+difftime(as.POSIXct(sun01Jul21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun01Jul21.HC$timestamp_gps_sec[nrow(sun01Jul21.HC)], origin = "1970-01-01"), units="hours")
+abs(difftime(as.POSIXct(sun22Jul21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun22Jul21.HC$timestamp_gps_sec[nrow(sun22Jul21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun22Jul21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun22Jul21.NW$timestamp_gps_sec[nrow(sun22Jul21.NW)], origin = "1970-01-01"), units="hours"))
+abs(difftime(as.POSIXct(sun05Aug21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun05Aug21.HC$timestamp_gps_sec[nrow(sun05Aug21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun05Aug21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun05Aug21.NW$timestamp_gps_sec[nrow(sun05Aug21.NW)], origin = "1970-01-01"), units="hours"))
+abs(difftime(as.POSIXct(sun10Aug21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun10Aug21.HC$timestamp_gps_sec[nrow(sun10Aug21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun10Aug21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun10Aug21.NW$timestamp_gps_sec[nrow(sun10Aug21.NW)], origin = "1970-01-01"), units="hours"))
+abs(difftime(as.POSIXct(sun27Aug21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun27Aug21.HC$timestamp_gps_sec[nrow(sun27Aug21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun27Aug21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun27Aug21.NW$timestamp_gps_sec[nrow(sun27Aug21.NW)], origin = "1970-01-01"), units="hours"))
+abs(difftime(as.POSIXct(sun16Sep21.HC$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun16Sep21.HC$timestamp_gps_sec[nrow(sun16Sep21.HC)], origin = "1970-01-01"), units="hours")+
+      difftime(as.POSIXct(sun16Sep21.NW$timestamp_gps_sec[1], origin = "1970-01-01"), as.POSIXct(sun16Sep21.NW$timestamp_gps_sec[nrow(sun16Sep21.NW)], origin = "1970-01-01"), units="hours"))
+
+# Supp Fig 3 (chlorophyll comparisons lab-extracted vs. robot loiter point sonde reading)
+
+sab26Aug21_labeled <- travel_effects(sab26Aug21, preset_loiter_time) %>% 
+  select("lake", "date", "timestamp_gps_sec", "loiter_tag", "loiterID", "loiter_num", "velocity_gps_mps", "temperatureWater_degC", "pH", "chlorophyll_a_RFU", "specificConductance_uscm", "oxygenDissolved_mgl", "turbidity_NTU")
+
+sab26Aug21.labeled.chl <- sab26Aug21_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number"))%>%
+  mutate(date = "2021-08-26", path = "perimeter", lake = "Sabattus")
+
+aub30Aug21.labeled.chl <- aub30Aug21_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number"))%>%
+  mutate(date = "2021-08-30", path = "Townsend", lake = "Auburn")
+
+sun11Jun21.HC.labeled.chl <- sun11Jun21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>% 
+  mutate(date = "2021-06-11", path = "HC", lake = "Sunapee")
+
+sun11Jun21.NW.labeled.chl <- sun11Jun21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-06-11", path = "NW", lake = "Sunapee")
+
+sun15Jun21.HC.labeled.chl <- sun15Jun21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-06-15", path = "HC", lake = "Sunapee")
+
+sun15Jun21.NW.labeled.chl <- sun15Jun21.NW_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-06-15", path = "NW", lake = "Sunapee")
+
+sun21Jun21.HC.labeled.chl <- sun21Jun21.HC_labeled %>%
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-06-21", path = "HC", lake = "Sunapee")
+
+sun21Jun21.NW.labeled.chl <- sun21Jun21.NW_labeled %>%   
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-06-21", path = "NW", lake = "Sunapee")
+
+sun01Jul21.HC.labeled.chl <- sun01Jul21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-07-01", path = "HC", lake = "Sunapee")
+
+sun22Jul21.HC.labeled.chl <- sun22Jul21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-07-22", path = "HC", lake = "Sunapee")
+
+sun22Jul21.NW.labeled.chl <- sun22Jul21.NW_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-07-22", path = "NW",lake = "Sunapee")
+
+sun05Aug21.HC.labeled.chl <- sun05Aug21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-08-05", path = "HC",lake = "Sunapee")
+
+sun05Aug21.NW.labeled.chl <- sun05Aug21.NW_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-08-05", path = "NW", lake = "Sunapee")
+
+sun10Aug21.HC.labeled.chl <- sun10Aug21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-08-10", path = "HC", lake = "Sunapee")
+
+sun10Aug21.NW.labeled.chl <- sun10Aug21.NW_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-08-10", path = "NW", lake = "Sunapee")
+
+sun27Aug21.HC.labeled.chl <- sun27Aug21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-08-27", path = "HC", lake = "Sunapee")
+
+sun27Aug21.NW.labeled.chl <- sun27Aug21.NW_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-08-27", path = "NW", lake = "Sunapee")
+
+sun16Sep21.HC.labeled.chl <- sun16Sep21.HC_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-09-16", path = "HC", lake = "Sunapee")
+
+sun16Sep21.NW.labeled.chl <- sun16Sep21.NW_labeled %>% 
+  dplyr::group_by(loiterID) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU)) %>% 
+  separate(loiterID, c("flag", "number"), "_") %>% 
+  filter(flag == "loiter") %>% 
+  unite(loiterID, c("flag", "number")) %>%
+  mutate(date = "2021-09-16", path = "NW", lake = "Sunapee")
+
+alldates.sondechl <- rbind(sun11Jun21.HC.labeled.chl, sun11Jun21.NW.labeled.chl, sun15Jun21.HC.labeled.chl, 
+                           sun15Jun21.NW.labeled.chl, sun21Jun21.HC.labeled.chl, sun21Jun21.NW.labeled.chl,
+                           sun01Jul21.HC.labeled.chl, sun22Jul21.HC.labeled.chl, sun22Jul21.NW.labeled.chl, 
+                           sun05Aug21.HC.labeled.chl, sun05Aug21.NW.labeled.chl, sun10Aug21.HC.labeled.chl, 
+                           sun10Aug21.NW.labeled.chl, sun27Aug21.HC.labeled.chl, sun27Aug21.NW.labeled.chl, 
+                           sun16Sep21.HC.labeled.chl, sun16Sep21.NW.labeled.chl, aub30Aug21.labeled.chl, sab26Aug21.labeled.chl) %>% 
+  mutate(daymonth = format(as.Date(date), "%m/%d/%Y")) %>% 
+  mutate(row_ID = paste(lake, date, path, loiterID, sep = '_'))
+
+# Read in lab extracted chl-a data
+labchl <- read.csv("https://www.dropbox.com/scl/fi/u5l7wnjh4ogdw8aoyemmk/Chl_insitu_lab_AUB_SAB_SUN.csv?rlkey=25z94p0jd32hj5biahsz8lbla&dl=1", header = T)
+
+labchl$date <- as.Date(labchl$date)
+
+labchl <- labchl %>% 
+  filter(field_rep == "A") %>% 
+  mutate(row_ID = paste(lake, date, path, loiterID, sep = '_'))
+
+# Join sonde and lab chl-a dataframes
+chl.regression <- merge(alldates.sondechl, labchl, by = "row_ID")
+
+# add loiter 6.5a and 6.5b, which were not technically loiters but suffice for this purpose, just stopped in place for 2 minutes while dragging ASV with our boat
+
+sab26Aug21_loiter6.5a <- sab26Aug21 %>% # 44.16268, -70.09155
+  dplyr::filter(timestamp_gps_sec > 1629995759 & timestamp_gps_sec < 1629995882) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU))
+
+sab26Aug21_loiter6.5b <- sab26Aug21 %>% # 44.1679, -70.08805
+  dplyr::filter(timestamp_gps_sec > 1629996779 & timestamp_gps_sec < 1629996902) %>% 
+  dplyr::summarize(median_sondechl_120 = median(chlorophyll_a_RFU))
+
+labchl_sab26Aug21_loiter6.5a <- labchl %>% 
+  dplyr::filter(loiterID == "loiter_6.5a") %>% 
+  select(conc_ugL_lake)
+
+labchl_sab26Aug21_loiter6.5b <- labchl %>% 
+  dplyr::filter(loiterID == "loiter_6.5b") %>% 
+  select(conc_ugL_lake)
+
+chl.regression <- chl.regression %>% 
+  add_row(row_ID = "Sabattus_2021_08_26_perimeter_loiter_6.5a", lake.x = "Sabattus", median_sondechl_120 = sab26Aug21_loiter6.5a[,1], conc_ugL_lake = labchl_sab26Aug21_loiter6.5a[,1]) %>% 
+  add_row(row_ID = "Sabattus_2021_08_26_perimeter_loiter_6.5b", lake.x = "Sabattus", median_sondechl_120 = sab26Aug21_loiter6.5b[,1], conc_ugL_lake = labchl_sab26Aug21_loiter6.5b[,1]) %>% 
+  select(row_ID, lake.x, median_sondechl_120, conc_ugL_lake)
+
+chl.regression.aub <- chl.regression[chl.regression$lake.x == "Auburn",]
+chl.regression.sab <- chl.regression[chl.regression$lake.x == "Sabattus",]
+chl.regression.sun <- chl.regression[chl.regression$lake.x == "Sunapee",]
+
+# Linear regressions for sonde vs lab measured chl a
+aub.lm <- lm(median_sondechl_120~conc_ugL_lake, data = chl.regression.aub) #R2 = 0.3136
+sab.lm <- lm(median_sondechl_120~conc_ugL_lake, data = chl.regression.sab) #R2 = 0.5887
+sun.lm <- lm(median_sondechl_120~conc_ugL_lake, data = chl.regression.sun) #R2 = 0.1597
+
+plot.chl.all <- ggplot() +
+  geom_smooth(method = "lm", data = chl.regression.aub, aes(x = conc_ugL_lake, y = median_sondechl_120), color = "#7BCCC5", size = 0.75, alpha = 0.2, fill = "#7BCCC5") +
+  geom_smooth(method = "lm", data = chl.regression.sab, aes(x = conc_ugL_lake, y = median_sondechl_120), color = "#7CBE62", size = 0.75, alpha = 0.2, fill = "#7CBE62") +
+  geom_smooth(method = "lm", data = chl.regression.sun, aes(x = conc_ugL_lake, y = median_sondechl_120), color = "#2B8DBE", size = 0.75, alpha = 0.2, fill = "#2B8DBE") +
+  geom_point(data = chl.regression.aub, aes(x = conc_ugL_lake, y = median_sondechl_120, color=lake.x, shape=lake.x, fill=lake.x), size=4, alpha = 0.5)+
+  geom_point(data = chl.regression.sab, aes(x = conc_ugL_lake, y = median_sondechl_120, color=lake.x, shape=lake.x, fill=lake.x), size=4, alpha = 0.5)+
+  geom_point(data = chl.regression.sun, aes(x = conc_ugL_lake, y = median_sondechl_120, color=lake.x, shape=lake.x, fill=lake.x), size=4, alpha = 0.5) + #use #228833 to add china
+  annotate("point", x = as.numeric(labchl_sab26Aug21_loiter6.5a), y = as.numeric(sab26Aug21_loiter6.5a), color = "#7CBE62", shape = 23, size = 4, fill = "#7CBE62", alpha = 0.5) +
+  annotate("point", x = as.numeric(labchl_sab26Aug21_loiter6.5b), y = as.numeric(sab26Aug21_loiter6.5b), color = "#7CBE62", shape = 23, size = 4, fill = "#7CBE62", alpha = 0.5) +
+  scale_color_manual(values = c("Sunapee" = "#2B8DBE", "Auburn" = "#7BCCC5", "Sabattus" = "#7CBE62"),
+                     labels = c("SUN", "AUB", "SAB"), name = "") +
+  scale_fill_manual(values = c("Sunapee" = "#2B8DBE", "Auburn" = "#7BCCC5", "Sabattus" = "#7CBE62"),
+                    labels = c("SUN", "AUB", "SAB"), name = "") +
+  scale_shape_manual(values = c("Sunapee" = 24, "Auburn" = 21, "Sabattus" = 23),
+                     labels = c("SUN", "AUB", "CHN", "SAB"), guide = "none") +
+  theme(legend.position = "none", panel.background=element_rect(colour = "black", size=1, fill = NA), legend.text=element_text(size=20),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black"),
+        legend.key = element_rect(fill = NA), text=element_text(size=14, color = "black"), legend.title = element_blank())+ 
+  coord_cartesian(xlim = c(0, 100), ylim = c(0, 2))+
+  geom_rect(aes(xmin = 0, xmax = 3, ymin = 0, ymax = 0.5), fill = NA, color="black")+
+  xlab(expression("Lab-Analyzed Chlorophyll"~italic("a")~"(\u00B5g/L)"))+
+  ylab(expression("Sonde-Measured Chlorophyll (RFU)"))
+
+plot.chl.aub.sun <- ggplot() +  # plot on different axes to zoom into smaller values
+  geom_smooth(method = "lm", data = chl.regression.sun, aes(x = conc_ugL_lake, y = median_sondechl_120), color = "#2B8DBE", size = 0.75, alpha = 0.2, fill = "#2B8DBE") +
+  geom_smooth(method = "lm", data = chl.regression.aub, aes(x = conc_ugL_lake, y = median_sondechl_120), color = "#7BCCC5", size = 0.75, alpha = 0.2, fill = "#7BCCC5") +
+  geom_point(data = chl.regression.aub, aes(x = conc_ugL_lake, y = median_sondechl_120, color=lake.x, shape=lake.x, fill=lake.x), size=4, alpha = 0.7)+
+  geom_point(data = chl.regression.sun, aes(x = conc_ugL_lake, y = median_sondechl_120, color=lake.x, shape=lake.x, fill=lake.x), size=4, alpha = 0.7) +
+  scale_color_manual(values = c("Sunapee" = "#2B8DBE", "Auburn" = "#7BCCC5", "Sabattus" = "#7CBE62"),
+                     labels = c("SUN", "AUB", "SAB")) +
+  scale_fill_manual(values = c("Sunapee" = "#2B8DBE", "Auburn" = "#7BCCC5", "Sabattus" = "#7CBE62"),
+                    labels = c("SUN", "AUB", "SAB")) +
+  scale_shape_manual(values = c("Sunapee" = 24, "Auburn" = 21, "Sabattus" = 23),
+                     labels = c("SUN", "AUB", "SAB")) +
+  theme(legend.position = c(.85, .1), panel.background=element_rect(colour = "black", size=1, fill = NA), 
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black"),
+        legend.key = element_rect(fill = NA), text=element_text(size=14, color = "black"), legend.title = element_blank())+ 
+  coord_cartesian(xlim = c(0, 3), ylim = c(0, 0.5))+
+  xlab("")+
+  ylab("")
+
+# Arrange Figure S3
+
+suppfig3 <- ggarrange(plot.chl.all, plot.chl.aub.sun,
+                      ncol=2, nrow = 1, align = "hv",
+                      labels = c("a", "b")) +
+  theme(plot.margin = margin(.1, .1, .1, .1, "cm"))
+
+# Figure S4-15 (Catabot deployment data not given in main text)
+
+# Figure S4: Sabattus August 26
+
+a <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+             data = sab26Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$pH, na.rm = T)-min(sabattus_all$pH, na.rm = T))/2)+min(sabattus_all$pH, na.rm = T),
+                        name="pH") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("") +
+  ylab("")
+
+b <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+             data = sab26Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$temperatureWater_degC, na.rm = T)-min(sabattus_all$temperatureWater_degC, na.rm = T))/2)+min(sabattus_all$temperatureWater_degC, na.rm = T),
+                        name="ºC") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("") +
+  ylab("Latitude")
+
+c <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+             data = sab26Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sab26Aug21$specificConductance_uscm, na.rm = T)-min(sab26Aug21$specificConductance_uscm, na.rm = T))/2)+min(sab26Aug21$specificConductance_uscm, na.rm = T),
+                        name=paste0("\u00B5", "S/cm")) +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+d <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
+             data = sab26Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sab26Aug21$chlorophyll_a_RFU, na.rm = T)-min(sab26Aug21$chlorophyll_a_RFU, na.rm = T))/2)+min(sab26Aug21$chlorophyll_a_RFU, na.rm = T),
+                        name=expression(paste("RFU"))) +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("")
+
+e <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+             data = sab26Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$oxygenDissolved_mgl, na.rm = T)-min(sabattus_all$oxygenDissolved_mgl, na.rm = T))/2)+min(sabattus_all$oxygenDissolved_mgl, na.rm = T),
+                        name="mg/L") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("") +
+  ylab("")
+
+f <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = turbidity_NTU), size=1, shape = 10,
+             data = sab26Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$turbidity_NTU, na.rm = T)-min(sabattus_all$turbidity_NTU, na.rm = T))/2)+min(sabattus_all$turbidity_NTU, na.rm = T),
+                        name="NTU") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("")
+
+suppfig4 <- ggarrange(b, e, a, c, f, d,
+                      ncol=3, nrow = 2, hjust = -3,
+                      labels = c("a", "b", "c", "d", "e", "f"))
+
+# Figure S5: Sabattus August 20
+
+a <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+             data = sab20Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$pH, na.rm = T)-min(sabattus_all$pH, na.rm = T))/2)+min(sabattus_all$pH, na.rm = T),
+                        name="pH") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("") +
+  ylab("")
+
+b <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+             data = sab20Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$temperatureWater_degC, na.rm = T)-min(sabattus_all$temperatureWater_degC, na.rm = T))/2)+min(sabattus_all$temperatureWater_degC, na.rm = T),
+                        name="ºC") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("") +
+  ylab("Latitude")
+
+c <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_mscm), size=1, shape = 10,
+             data = sab20Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sab20Aug21$specificConductance_mscm, na.rm = T)-min(sab20Aug21$specificConductance_mscm, na.rm = T))/2)+min(sab20Aug21$specificConductance_mscm, na.rm = T),
+                        name=paste0("\u00B5", "S/cm")) +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+e <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+             data = sab20Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$oxygenDissolved_mgl, na.rm = T)-min(sabattus_all$oxygenDissolved_mgl, na.rm = T))/2)+min(sabattus_all$oxygenDissolved_mgl, na.rm = T),
+                        name="mg/L") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("") +
+  ylab("")
+
+f <- get_stadiamap(sabattus, zoom = 14, maptype = "stamen_terrain") %>% ggmap()+
+  geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = turbidity_NTU), size=1, shape = 10,
+             data = sab20Aug21) +
+  scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                        midpoint = ((max(sabattus_all$turbidity_NTU, na.rm = T)-min(sabattus_all$turbidity_NTU, na.rm = T))/2)+min(sabattus_all$turbidity_NTU, na.rm = T),
+                        name="NTU") +
+  theme(legend.position = "right", text = element_text(size=14, color = "black"),
+        legend.key.width = unit(5, "mm"), legend.key.height = unit(15, "mm"), plot.margin = margin(1, 1, 1, 1),
+        legend.title = element_text(size=14), axis.text.x = element_text(vjust = 0.5, hjust=1, color = "black"),
+        legend.text = element_text(hjust = 0, vjust = 0, size = 12), axis.text.y = element_text(hjust = 0.5, colour="black", angle = 90),
+        panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+  scale_x_continuous(breaks = seq(-70.11, -70.08, by=0.02), expand=expansion(0,0)) +
+  xlab("Longitude") +
+  ylab("")
+
+suppfig5 <- ggarrange(b, e, a, c, f,
+                      ncol=3, nrow = 2, hjust = c(-3),
+                      labels = c("a", "b", "c", "d", "e"))
+
+# Figure S6: Auburn August 30
+
+asv_plotter_auburn <- function(map_bounds, deployment, lake_all, zoom){ 
+  #where "deployment" is the dataframe of that particular deployment date
+  #and "lake_all" is a combined dataframe that contains all deployments for a single lake
+  #and "map_bounds" is a set boundary of the spatial extent to be mapped
+  #and "zoom" looks best at 12, 14, or 16, depending on spatial scale of deployment
+  
+  a <- get_stadiamap(bbox = map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$pH, na.rm = T)-min(lake_all$pH, na.rm = T))/2)+min(lake_all$pH, na.rm = T),
+                          name="pH") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) + 
+    scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  b <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$temperatureWater_degC, na.rm = T)-min(lake_all$temperatureWater_degC, na.rm = T))/2)+min(lake_all$temperatureWater_degC, na.rm = T),
+                          name="ºC") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) + 
+    scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("Latitude")
+  
+  c <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
+                          name=paste0("\u00B5", "S/cm")) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) + 
+    scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("Latitude")
+  
+  d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
+                          name=expression(paste("RFU"))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +   
+    scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("Longitude")
+  
+  e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
+                          name="mg/L") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) + 
+    scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  f <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = turbidity_NTU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$turbidity_NTU, na.rm = T)-min(lake_all$turbidity_NTU, na.rm = T))/2)+min(lake_all$turbidity_NTU, na.rm = T),
+                          name="NTU") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +  
+    scale_y_continuous(breaks = seq(44.150, 44.155, by=0.005), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  plot <- ggarrange(b, e, a, c, f, d,
+                    ncol=3, nrow = 2,
+                    labels = c("a", "b", "c", "d", "e", "f"))
+  
+  return(plot)
+}
+
+suppfig6 <- asv_plotter_auburn(auburn, aub30Aug21, auburn_all, 16)
+
+# Figure S7-9: Sunapee June 11, 15, 21
+
+asv_plotter_sunapee_preTurb <- function(map_bounds, deployment, path1, path2, lake_all, zoom){ 
+  #early dates before inclusion of turbidity sensor as part of data stream
+  #where deployment is the dataframe of that particular deployment date
+  #and lake_all is a combined dataframe that contains all deployments for a single lake
+  #and map_bounds is a set boundary of the spatial extent to be mapped
+  # and zoom is either 12 for SAB or 14 for AUB, CHN
+  
+  a <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$pH, na.rm = T)-min(lake_all$pH, na.rm = T))/2)+min(lake_all$pH, na.rm = T),
+                          name="pH", labels=function(x) paste0(format(round(x, 2), nsmall = 2))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  b <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$temperatureWater_degC, na.rm = T)-min(lake_all$temperatureWater_degC, na.rm = T))/2)+min(lake_all$temperatureWater_degC, na.rm = T),
+                          name="ºC") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("Latitude")
+  
+  c <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
+                          name=paste0("\u00B5", "S/cm")) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("Latitude")
+  
+  d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
+                          name=expression(paste("RFU"))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
+                          name="mg/L") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  plot <- ggarrange(b, e, a, c, d,
+                    ncol=3, nrow = 2, hjust = -0.5, 
+                    labels = c("a", "b", "c", "d", "e"))
+  
+  return(plot)
+}
+
+suppfig7 <- asv_plotter_sunapee_preTurb(sunapee, sun11Jun21, sun11Jun21.HC, sun11Jun21.NW, sunapee_all, 16)
+
+suppfig8 <- asv_plotter_sunapee_preTurb(sunapee, sun15Jun21, sun15Jun21.HC, sun15Jun21.NW, sunapee_all, 16)
+
+suppfig9 <- asv_plotter_sunapee_preTurb(sunapee, sun21Jun21, sun21Jun21.HC, sun21Jun21.NW, sunapee_all, 16)
+
+# Figure S10: Sunapee July 1
+
+asv_plotter_sunapee_preTurb_oneSite <- function(map_bounds, deployment, path1, lake_all, zoom){ 
+  #dates when deployments only happened at one of the two Sunapee sites, preTurb
+  #where deployment is the dataframe of that particular deployment date
+  #and lake_all is a combined dataframe that contains all deployments for a single lake
+  #and map_bounds is a set boundary of the spatial extent to be mapped
+  # and zoom is either 12 for SAB or 14 for AUB, CHN
+  
+  a <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$pH, na.rm = T)-min(lake_all$pH, na.rm = T))/2)+min(lake_all$pH, na.rm = T),
+                          name="pH", labels=function(x) paste0(format(round(x, 2), nsmall = 2))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  b <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$temperatureWater_degC, na.rm = T)-min(lake_all$temperatureWater_degC, na.rm = T))/2)+min(lake_all$temperatureWater_degC, na.rm = T),
+                          name="ºC") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("Latitude")
+  
+  c <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
+                          name=paste0("\u00B5", "S/cm")) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("Latitude")
+  
+  d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
+                          name=expression(paste("RFU"))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
+                          name="mg/L") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  plot <- ggarrange(b, e, a, c, d,
+                    ncol=3, nrow = 2, hjust = -0.5,
+                    labels = c("a", "b", "c", "d", "e"))
+  
+  return(plot)
+}
+
+suppfig10 <- asv_plotter_sunapee_preTurb_oneSite(sunapee, sun01Jul21.HC, sun01Jul21.HC, sunapee_all, 16)
+
+# Figure S11: Sunapee July 22
+
+asv_plotter_sunapee_postTurb_oneSite <- function(map_bounds, deployment, path1, lake_all, zoom){ #where deployment is the dataframe of that particular deployment date
+  #and lake_all is a combined dataframe that contains all deployments for a single lake
+  #and map_bounds is a set boundary of the spatial extent to be mapped
+  # and zoom is either 12 for SAB or 14 for AUB, CHN
+  
+  a <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$pH, na.rm = T)-min(lake_all$pH, na.rm = T))/2)+min(lake_all$pH, na.rm = T),
+                          name="pH", labels=function(x) paste0(format(round(x, 2), nsmall = 2))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  b <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$temperatureWater_degC, na.rm = T)-min(lake_all$temperatureWater_degC, na.rm = T))/2)+min(lake_all$temperatureWater_degC, na.rm = T),
+                          name="ºC") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("Latitude")
+  
+  c <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
+                          name=paste0("\u00B5", "S/cm")) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("Latitude")
+  
+  d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
+                          name=expression(paste("RFU"))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
+                          name="mg/L") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  f <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = turbidity_NTU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$turbidity_NTU, na.rm = T)-min(lake_all$turbidity_NTU, na.rm = T))/2)+min(lake_all$turbidity_NTU, na.rm = T),
+                          name="NTU") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  plot <- ggarrange(b, e, a, c, f, d,
+                    ncol=3, nrow = 2, hjust = -0.5,
+                    labels = c("a", "b", "c", "d", "e", "f"))
+  
+  return(plot)
+}
+
+suppfig11 <- asv_plotter_sunapee_postTurb_oneSite(sunapee, sun22Jul21.HC, sun22Jul21.HC, sunapee_all, 16)
+
+# Figure S12-15: Sunapee August 5, 10, 27, September 16
+
+asv_plotter_sunapee_postTurb <- function(map_bounds, deployment, path1, path2, lake_all, zoom){ #where deployment is the dataframe of that particular deployment date
+  #and lake_all is a combined dataframe that contains all deployments for a single lake
+  #and map_bounds is a set boundary of the spatial extent to be mapped
+  # and zoom is either 12 for SAB or 14 for AUB, CHN
+  
+  a <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = pH), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$pH, na.rm = T)-min(lake_all$pH, na.rm = T))/2)+min(lake_all$pH, na.rm = T),
+                          name="pH", labels=function(x) paste0(format(round(x, 2), nsmall = 2))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  b <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = temperatureWater_degC), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$temperatureWater_degC, na.rm = T)-min(lake_all$temperatureWater_degC, na.rm = T))/2)+min(lake_all$temperatureWater_degC, na.rm = T),
+                          name="ºC") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("Latitude")
+  
+  c <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = specificConductance_uscm), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$specificConductance_uscm, na.rm = T)-min(lake_all$specificConductance_uscm, na.rm = T))/2)+min(lake_all$specificConductance_uscm, na.rm = T),
+                          name=paste0("\u00B5", "S/cm")) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("Latitude")
+  
+  d <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = chlorophyll_a_RFU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$chlorophyll_a_RFU, na.rm = T)-min(lake_all$chlorophyll_a_RFU, na.rm = T))/2)+min(lake_all$chlorophyll_a_RFU, na.rm = T),
+                          name=expression(paste("RFU"))) +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  e <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = oxygenDissolved_mgl), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$oxygenDissolved_mgl, na.rm = T)-min(lake_all$oxygenDissolved_mgl, na.rm = T))/2)+min(lake_all$oxygenDissolved_mgl, na.rm = T),
+                          name="mg/L") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("") +
+    ylab("")
+  
+  f <- get_stadiamap(map_bounds, zoom = zoom, maptype = "stamen_terrain") %>% ggmap()+
+    geom_point(aes(x = longitude_gps_deg, y = latitude_gps_deg, color = turbidity_NTU), size=1, shape = 10,
+               data = deployment) +
+    scale_color_gradient2(low = 'yellow', mid = 'purple', high = 'blue', 
+                          midpoint = ((max(lake_all$turbidity_NTU, na.rm = T)-min(lake_all$turbidity_NTU, na.rm = T))/2)+min(lake_all$turbidity_NTU, na.rm = T),
+                          name="NTU") +
+    theme(legend.position = "right", text = element_text(size=14, color = "black"),
+          legend.key.width = unit(5, "mm"), legend.key.height = unit(10, "mm"), plot.margin = margin(1, 1, 1, 1),
+          legend.title = element_text(size=14), legend.text = element_text(hjust = 0, vjust = 0, size = 12),
+          axis.text.x = element_text(vjust = 0.5, hjust=0.5, colour = "black"), 
+          axis.text.y.left = element_text(color = "black", angle = 90, hjust = 0.5),
+          panel.border = element_rect(color = "black", fill = NA, size = 2)) +
+    scale_x_continuous(breaks = seq(-72.070, -72.020, by=0.01), expand=expansion(0,0)) +
+    scale_y_continuous(breaks = seq(43.41, 43.42, by = 0.01), expand=expansion(0,0)) +
+    xlab("Longitude") +
+    ylab("")
+  
+  plot <- ggarrange(b, e, a, c, f, d,
+                    ncol=3, nrow = 2, hjust = -0.5,
+                    labels = c("a", "b", "c", "d", "e", "f"))
+  
+  return(plot)
+}
+
+suppfig13 <- asv_plotter_sunapee_postTurb(sunapee, sun05Aug21, sun05Aug21.HC, sun05Aug21.NW, sunapee_all, 16)
+
+suppfig14 <- asv_plotter_sunapee_postTurb(sunapee, sun10Aug21, sun10Aug21.HC, sun10Aug21.NW, sunapee_all, 16)
+
+suppfig15 <- asv_plotter_sunapee_postTurb(sunapee, sun27Aug21, sun27Aug21.HC, sun27Aug21.NW, sunapee_all, 16)
+
+suppfig16 <- asv_plotter_sunapee_postTurb(sunapee, sun16Sep21, sun16Sep21.HC, sun16Sep21.NW, sunapee_all, 16)
+
+# Figure S16 (specific conductance measured at Sunapee stationary buoy)
+
+buoy_spc <- read.csv("2021_exo_L1_v2022.csv", header = T) #dataset sourced from LSPA et al. 2023 https://portal.edirepository.org/nis/mapbrowse?scope=edi&identifier=499&revision=4
+
+buoy_spc$datetime <- as.POSIXct(buoy_spc$datetime, format = "%Y-%m-%d %H:%M:%S")
+buoy_spc$date <- as.Date(buoy_spc$datetime)
+buoy_spc$time <- format(buoy_spc$datetime, "%H:%M")
+
+catabot_deployments <- as.Date(c("2021-07-01", "2021-07-22", "2021-08-05", "2021-08-10", "2021-08-27", "2021-09-16")) #select date/times overlapping with Catabot deployments
+
+buoy_cat <- buoy_spc %>%
+  filter(as.Date(date) %in% catabot_deployments)
+
+buoy_cat_final <- buoy_cat %>%
+  filter(time >= "09:00" & time <= "14:00")
+
+buoy_cat_final$time <- as.POSIXct(buoy_cat_final$time, format="%H:%M", tz="UTC") #calculate means for each date
+
+buoy_cat_means <- buoy_cat_final %>%
+  mutate(time_numeric = as.numeric(format(time, "%H")) * 60 + as.numeric(format(time, "%M")))
+
+buoy_cat_means <- buoy_cat_means %>%
+  group_by(date) %>%
+  mutate(mean_value = mean(specificConductance_mScm_1m, na.rm = TRUE))
+
+# Plot specific conductance by date
+
+July_01 <- ggplot(buoy_cat_means %>%
+                    filter(date == "2021-07-01"),  # Change for the specific date
+                  aes(x = time_numeric, y = specificConductance_mScm_1m)) +
+  geom_point(color = "#2B8DBE", alpha = 0.7, size = 1) + 
+  geom_hline(aes(yintercept = mean_value), linetype = "solid", color = "grey", alpha = 0.8, size = .5) +  
+  scale_x_continuous(
+    breaks = c(10 * 60, 11 * 60, 12 * 60, 13 * 60),  # Set specific breaks for 10:00, 11:00, 12:00, 13:00 (in minutes)
+    labels = function(x) format(as.POSIXct(x * 60, origin = "1970-01-01", tz = "UTC"), "%H:%M")  # Format labels as HH:MM
+  ) +
+  scale_y_continuous(
+    name = "Specific Conductance (\U00B5S/cm)", 
+    limits = c(98, 101.5) 
+  ) +
+  labs(
+    title = "July 1",
+    x = NULL
+  ) +
+  theme_bw() +  # Apply theme_bw as base
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 6, angle = 320, hjust = 0.5, vjust = 0),
+    axis.text.y = element_text(size = 6),
+    axis.title = element_text(size = 7),
+    strip.text = element_text(size = 6),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    plot.title = element_text(size = 7),
+    plot.subtitle = element_text(size = 7)
+  )
+
+July_22 <- ggplot(buoy_cat_means %>%
+                    filter(date == "2021-07-22"),  # Change for the specific date
+                  aes(x = time_numeric, y = specificConductance_mScm_1m)) +
+  geom_point(color = "#2B8DBE", alpha = 0.7, size = 1) + 
+  geom_hline(aes(yintercept = mean_value), linetype = "solid", color = "grey", alpha = 0.8, size = .5) +  
+  scale_x_continuous(
+    breaks = c(10 * 60, 11 * 60, 12 * 60, 13 * 60),  # Set specific breaks for 10:00, 11:00, 12:00, 13:00 (in minutes)
+    labels = function(x) format(as.POSIXct(x * 60, origin = "1970-01-01", tz = "UTC"), "%H:%M")  # Format labels as HH:MM
+  ) +
+  scale_y_continuous(
+    name = "Specific Conductance (mS/cm)", 
+    limits = c(98, 101.5) 
+  ) +
+  labs(
+    title = "July 22",
+    x = NULL
+  ) +
+  theme_bw() +  # Apply theme_bw as base
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 6, angle = 320, hjust = 0.5, vjust = 0),
+    axis.text.y = element_text(size = 6),
+    axis.title.y = element_blank(),
+    axis.title = element_text(size = 7),
+    strip.text = element_text(size = 6),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    plot.title = element_text(size = 7),
+    plot.subtitle = element_text(size = 7)
+  )
+
+Aug_05 <- ggplot(buoy_cat_means %>%
+                   filter(date == "2021-08-05"),  # Change for the specific date
+                 aes(x = time_numeric, y = specificConductance_mScm_1m)) +
+  geom_point(color = "#2B8DBE", alpha = 0.7, size = 1) + 
+  geom_hline(aes(yintercept = mean_value), linetype = "solid", color = "grey", alpha = 0.8, size = .5) +  
+  scale_x_continuous(
+    breaks = c(10 * 60, 11 * 60, 12 * 60, 13 * 60),  # Set specific breaks for 10:00, 11:00, 12:00, 13:00 (in minutes)
+    labels = function(x) format(as.POSIXct(x * 60, origin = "1970-01-01", tz = "UTC"), "%H:%M")  # Format labels as HH:MM
+  ) +
+  scale_y_continuous(
+    name = "Specific Conductance (mS/cm)", 
+    limits = c(98, 101.5) 
+  ) +
+  labs(
+    title = "August 5",
+    x = NULL
+  ) +
+  theme_bw() +  # Apply theme_bw as base
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 6, angle = 320, hjust = 0.5, vjust = 0),
+    axis.text.y = element_text(size = 6),
+    axis.title.y = element_blank(),
+    axis.title = element_text(size = 7),
+    strip.text = element_text(size = 6),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    plot.title = element_text(size = 7),
+    plot.subtitle = element_text(size = 7)
+  )
+
+Aug_10 <- ggplot(buoy_cat_means %>%
+                   filter(date == "2021-08-10"),  # Change for the specific date
+                 aes(x = time_numeric, y = specificConductance_mScm_1m)) +
+  geom_point(color = "#2B8DBE", alpha = 0.7, size = 1) + 
+  geom_hline(aes(yintercept = mean_value), linetype = "solid", color = "grey", alpha = 0.8, size = .5) +  
+  scale_x_continuous(
+    breaks = c(10 * 60, 11 * 60, 12 * 60, 13 * 60),  # Set specific breaks for 10:00, 11:00, 12:00, 13:00 (in minutes)
+    labels = function(x) format(as.POSIXct(x * 60, origin = "1970-01-01", tz = "UTC"), "%H:%M")  # Format labels as HH:MM
+  ) +
+  scale_y_continuous(
+    name = "Specific Conductance (\U00B5S/cm)", 
+    limits = c(98, 101.5) 
+  ) +
+  labs(
+    title = "August 10",
+    x = NULL
+  ) +
+  theme_bw() +  # Apply theme_bw as base
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 6, angle = 320, hjust = 0.5, vjust = 0),
+    axis.text.y = element_text(size = 6),
+    axis.title = element_text(size = 7),
+    strip.text = element_text(size = 6),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    plot.title = element_text(size = 7),
+    plot.subtitle = element_text(size = 7)
+  )
+
+Aug_27 <- ggplot(buoy_cat_means %>%
+                   filter(date == "2021-08-27"),  # Change for the specific date
+                 aes(x = time_numeric, y = specificConductance_mScm_1m)) +
+  geom_point(color = "#2B8DBE", alpha = 0.7, size = 1) + 
+  geom_hline(aes(yintercept = mean_value), linetype = "solid", color = "grey", alpha = 0.8, size = .5) +  
+  scale_x_continuous(
+    breaks = c(10 * 60, 11 * 60, 12 * 60, 13 * 60),  # Set specific breaks for 10:00, 11:00, 12:00, 13:00 (in minutes)
+    labels = function(x) format(as.POSIXct(x * 60, origin = "1970-01-01", tz = "UTC"), "%H:%M")  # Format labels as HH:MM
+  ) +
+  scale_y_continuous(
+    name = "Specific Conductance (mS/cm)", 
+    limits = c(98, 101.5) 
+  ) +
+  labs(
+    title = "August 27",
+    x = NULL
+  ) +
+  theme_bw() +  # Apply theme_bw as base
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 6, angle = 320, hjust = 0.5, vjust = 0),
+    axis.text.y = element_text(size = 6),
+    axis.title.y = element_blank(),
+    axis.title = element_text(size = 7),
+    strip.text = element_text(size = 6),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    plot.title = element_text(size = 7),
+    plot.subtitle = element_text(size = 7)
+  )
+
+Sep_16 <- ggplot(buoy_cat_means %>%
+                   filter(date == "2021-09-16"),  # Change for the specific date
+                 aes(x = time_numeric, y = specificConductance_mScm_1m)) +
+  geom_point(color = "#2B8DBE", alpha = 0.7, size = 1) + 
+  geom_hline(aes(yintercept = mean_value), linetype = "solid", color = "grey", alpha = 0.8, size = .5) +  
+  scale_x_continuous(
+    breaks = c(10 * 60, 11 * 60, 12 * 60, 13 * 60),  # Set specific breaks for 10:00, 11:00, 12:00, 13:00 (in minutes)
+    labels = function(x) format(as.POSIXct(x * 60, origin = "1970-01-01", tz = "UTC"), "%H:%M")  # Format labels as HH:MM
+  ) +
+  scale_y_continuous(
+    name = "Specific Conductance (mS/cm)", 
+    limits = c(98, 101.5) 
+  ) +
+  labs(
+    title = "September 16",
+    x = NULL
+  ) +
+  theme_bw() +  # Apply theme_bw as base
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 6, angle = 320, hjust = 0.5, vjust = 0),
+    axis.text.y = element_text(size = 6),
+    axis.title.y = element_blank(),
+    axis.title = element_text(size = 7),
+    strip.text = element_text(size = 6),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    plot.title = element_text(size = 7),
+    plot.subtitle = element_text(size = 7)
+  )
+
+suppfig16 <- ggarrange(July_01, July_22, Aug_05, Aug_10, Aug_27, Sep_16,
+                      nrow=2, ncol=3, align = "v")
+
+# Figure S17 (precipitation record Sunapee)
+
+lebanon_precip <- read.csv(file = "PrecipAll_LebanonMunicipalAirport.csv", header = T) #data accessed from https://www.weather.gov/wrh/timeseries?site=KLEB
+
+lebanon_precip$DATE <- as.Date(lebanon_precip$DATE, format = "%m/%d/%y")
+
+lebanon_precip_2021 <- lebanon_precip %>% 
+  mutate(year = year(DATE)) %>% 
+  filter(year == 2021) %>% 
+  filter(DATE > "2021-04-01" & DATE < "2021-10-01")
+
+deployment_dates <- data.frame(date = as.Date(c("2021-06-11", "2021-06-15", "2021-06-21", 
+                                                "2021-07-01", "2021-07-22", "2021-07-22", 
+                                                "2021-08-10", "2021-08-27", "2021-09-16")))
+
+suppfig17 <- ggplot() +
+  geom_point(data = lebanon_precip_2021, aes(x = DATE, y = PRCP)) +
+  geom_path(data = lebanon_precip_2021, aes(x = DATE, y = PRCP)) +
+  scale_x_date(date_labels = "%b", date_breaks = "months") +
+  geom_segment(data = deployment_dates,
+               aes(x = date, xend = date, y = 0, yend = 29),
+               linetype = "dashed", color = "navy") +
+  annotate("text", x = deployment_dates$date, y = 32, label = deployment_dates$date, 
+           angle = 90, size = 5) +
+  theme(legend.position = "none", panel.background=element_rect(colour = "black", size=1, fill = NA),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(color="black"),
+        legend.key = element_rect(fill = NA), text=element_text(size=18, color = "black"), legend.title = element_blank())+
+  xlab("") +
+  ylab("Precipitation (mm)")
+
+###############################################################################################
